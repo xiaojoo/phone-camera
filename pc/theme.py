@@ -96,7 +96,7 @@ QLabel {{ background: transparent; }}
 
 /* ---------- inputs ---------- */
 
-QLineEdit, QComboBox, QSpinBox {{
+QLineEdit, QSpinBox {{
     background: {CARD};
     border: 1px solid {BORDER};
     border-radius: 7px;
@@ -113,32 +113,33 @@ QLineEdit:focus, QSpinBox:focus {{
     outline: none;
 }}
 
-/* 下拉框点击时不画焦点边框：弹层本身就是反馈，画了会让框子看起来变了尺寸 */
-QComboBox:focus {{
-    border-color: {BORDER};
-    outline: none;
-}}
-
 QLineEdit:disabled, QSpinBox:disabled {{
     color: {TEXT_MUTED};
     background: {PANEL};
 }}
 
-QComboBox::drop-down {{
-    border: none;
-    width: 22px;
-}}
-
-QComboBox QAbstractItemView {{
+QMenu {{
     background: {CARD};
     border: 1px solid {BORDER_STRONG};
     border-radius: 6px;
     padding: 4px;
-    outline: none;
     color: {TEXT_SECONDARY};
-    /* 高亮条由 DeviceCombo 的 delegate 画，样式那边不要再用调色板画方块 */
-    selection-background-color: transparent;
-    selection-color: {TEXT};
+}}
+
+QMenu::item {{
+    padding: 7px 14px;
+    border-radius: 5px;
+}}
+
+QMenu::item:selected {{
+    background: {ACCENT_DIM};
+    color: {TEXT};
+}}
+
+QMenu::separator {{
+    height: 1px;
+    background: {BORDER};
+    margin: 3px 8px;
 }}
 
 #AddressField {{ font-family: {MONO}; }}
@@ -165,6 +166,21 @@ QPushButton:pressed {{ background: {BORDER}; }}
 
 QPushButton:disabled {{
     color: {TEXT_MUTED};
+    background: {PANEL};
+    border-color: {BORDER};
+}}
+
+#FieldButton {{
+    text-align: left;
+    padding: 7px 10px;
+    color: {TEXT};
+    font-size: 13px;
+    font-weight: normal;
+}}
+
+#FieldButton:hover {{ background: {CARD_HOVER}; border-color: {BORDER_STRONG}; }}
+
+#FieldButton:disabled {{
     background: {PANEL};
     border-color: {BORDER};
 }}

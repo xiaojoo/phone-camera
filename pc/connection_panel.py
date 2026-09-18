@@ -1,20 +1,18 @@
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPointF, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont, QPalette, QPainter, QPen, QPolygonF
+from PySide6.QtCore import QPoint, QPointF, Qt, QThread, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QSpinBox,
     QStackedWidget,
-    QStyle,
-    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -67,60 +65,91 @@ def section(key: str) -> QLabel:
     return label
 
 
-class PopupDelegate(QStyledItemDelegate):
-    """弹层画成菜单的样子：行高、分隔线、圆角高亮条。"""
+class DeviceSelector(QPushButton):
+    """设备选择：点开是贴着按钮下方的菜单。
 
-    ROW_HEIGHT = 30
-    MASK = (QStyle.StateFlag.State_Selected
-            | QStyle.StateFlag.State_MouseOver).value
-
-    def sizeHint(self, option, index):
-        size = super().sizeHint(option, index)
-        size.setHeight(max(size.height(), self.ROW_HEIGHT))
-        return size
-
-    def paint(self, painter, option, index) -> None:
-        selected = QStyle.StateFlag.State_Selected in option.state
-        hovered = QStyle.StateFlag.State_MouseOver in option.state
-
-        if selected or hovered:
-            painter.save()
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(
-                QColor(theme.ACCENT_DIM if selected else theme.CARD_HOVER)
-            )
-            painter.drawRoundedRect(option.rect.adjusted(4, 1, -4, -1), 5, 5)
-            painter.restore()
-
-            option.state = QStyle.State(option.state.value & ~self.MASK)
-
-            colors = option.palette
-            colors.setColor(
-                QPalette.ColorRole.Text,
-                QColor(theme.TEXT if selected else theme.TEXT_SECONDARY),
-            )
-            option.palette = colors
-
-        super().paint(painter, option, index)
-
-        if index.row() + 1 < index.model().rowCount(index.parent()):
-            painter.save()
-            painter.setPen(QPen(QColor(theme.BORDER)))
-            bottom = option.rect.bottom()
-            painter.drawLine(option.rect.left() + 8, bottom,
-                             option.rect.right() - 8, bottom)
-            painter.restore()
-
-
-class DeviceCombo(QComboBox):
-    """QSS 一旦定义 ::drop-down，Qt 就不再画原生箭头，只能自己补一个。"""
+    QComboBox 的弹层会故意把当前项对齐到按钮上，看起来就像输入框自己
+    移位、变色；菜单没有这个行为。
+    """
 
     INSET = 17          # 让箭头到右边的留白与文字到左边的 12px 对齐
+    MENU_GAP = 2
+
+    currentIndexChanged = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setItemDelegate(PopupDelegate(self))
+
+        self.setObjectName("FieldButton")
+        self.setCursor(Qt.PointingHandCursor)
+
+        self._items: list[tuple[str, str]] = []
+        self._index = -1
+
+        self.clicked.connect(self._show_menu)
+
+    # ---------------- 与 QComboBox 同名的接口 ----------------
+
+    def addItem(self, text: str, data: str = "") -> None:
+        self._items.append((text, data))
+
+        if self._index < 0:
+            self._select(0)
+
+    def setItemText(self, row: int, text: str) -> None:
+        if 0 <= row < len(self._items):
+            _, data = self._items[row]
+            self._items[row] = (text, data)
+            self.setText(self._label())
+
+    def clear(self) -> None:
+        self._items = []
+        self._index = -1
+        self.setText("")
+
+    def findData(self, data: str) -> int:
+        for row, (_, value) in enumerate(self._items):
+            if value == data:
+                return row
+
+        return -1
+
+    def setCurrentIndex(self, index: int) -> None:
+        self._select(index)
+
+    def currentData(self):
+        if 0 <= self._index < len(self._items):
+            return self._items[self._index][1]
+
+        return None
+
+    # ---------------- 行为 ----------------
+
+    def _select(self, index: int) -> None:
+        if index == self._index:
+            return
+
+        self._index = index
+        self.setText(self._label())
+        self.currentIndexChanged.emit(index)
+
+    def _label(self) -> str:
+        if 0 <= self._index < len(self._items):
+            return self._items[self._index][0]
+
+        return ""
+
+    def _show_menu(self) -> None:
+        menu = QMenu(self)
+
+        for row, (text, _) in enumerate(self._items):
+            action = menu.addAction(text)
+            action.setCheckable(True)
+            action.setChecked(row == self._index)
+            action.triggered.connect(lambda _=False, r=row: self._select(r))
+
+        menu.exec(self.mapToGlobal(self.rect().bottomLeft())
+                  + QPoint(0, self.MENU_GAP))
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
@@ -330,7 +359,7 @@ class ConnectionPanel(QWidget):
         grid.addWidget(self._adb_value, 0, 1)
 
         grid.addWidget(self._label("usb.device"), 1, 0)
-        self._devices = DeviceCombo()
+        self._devices = DeviceSelector()
         grid.addWidget(self._devices, 1, 1)
 
         grid.addWidget(self._label("usb.phonePort"), 2, 0)
