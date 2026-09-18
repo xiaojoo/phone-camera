@@ -37,6 +37,7 @@ USB 方式不需要手机侧改任何代码，只是把端口经 adb 转发到�
 | `pc/camera_receiver.py` | OpenCV 拉流与超时控制 |
 | `pc/adb_bridge.py` | adb 定位、设备列表、端口转发 |
 | `pc/video_view.py` `pc/metrics_bar.py` `pc/theme.py` `pc/i18n.py` | 画面、指标、样式、文案 |
+| `pc/assets/app_icon.ico` | 窗口/任务栏图标（同一份几何也生成 Android 的 mipmap） |
 
 `pc/.venv/` 是本机虚拟环境，不属于仓库内容，换机器按下面的步骤重建即可。
 
@@ -63,15 +64,25 @@ adb shell am start -n com.camera/.MainActivity
 
 - **状态胶囊**：`已停止 / 等待连接 / 推流中`，右侧是语言切换按钮
 - **取景预览**
+- **摄像头**：`后置 / 前置` 分段切换，选择会被记住
 - **连接方式**：`Wi-Fi` 面板显示推流地址、在线客户端数、端口输入框；`USB 数据线` 面板显示线缆是否插入、以及电脑端要执行的 adb 命令
 - **启动服务 / 停止服务**
+
+行为：
+
+- 服务运行时给窗口加 `FLAG_KEEP_SCREEN_ON`，手机不会自动息屏；停止服务后恢复正常
+- 按 Home 切后台：直接进入小窗（PiP）继续推流，不断开连接；小窗里只有预览画面
+- 按返回键：弹出「切到后台？」，`退出` 会停服务并断开电脑连接，`小窗运行` 进入 PiP
+- Android 8.0 以下没有 PiP，此时切后台就是普通后台（相机随生命周期解绑）
 
 HTTP 接口：
 
 | 路径 | 返回 |
 | --- | --- |
 | `/video` | `multipart/x-mixed-replace` 视频流 |
-| `/status` | JSON：`running` `ip` `port` `clients` `stream` |
+| `/status` | JSON：`running` `ip` `port` `clients` `camera` `stream` |
+| `/camera` | JSON：当前镜头 |
+| `/camera?face=front` / `?face=back` | 切换镜头并返回新值 |
 | `/` | 一个直接嵌 `/video` 的网页，方便用手机浏览器自测 |
 
 端口可在界面里改（1024–65535），改完会自动重启服务。
@@ -98,6 +109,9 @@ python -m venv .venv
 
 快捷键：`Ctrl+K` 连接/断开，`F11` 全屏（`Esc` 退出）。
 截图按钮写文件到当前目录的 `snapshots/camera_*.png`。
+
+画面区右上角的按钮：`切到前置 / 切到后置`（连上之后才可用，当前镜头从手机的
+`/status` 读取）、`English / 中文`、`截图`、`全屏`。
 
 同一台电脑只能开一个桥接窗口：`adb forward` 的本机端口是全局的，两个实例会互相把
 对方的流打断，所以第二个启动时会提示已有人在运行然后退出。
@@ -164,11 +178,12 @@ adb -s <serial> forward --remove tcp:8080
 
 ## 已知限制
 
+- 小窗（PiP）停靠的角落由系统决定，通常是右下，可拖动；API 没有"固定右上角"的接口
+- `FLAG_KEEP_SCREEN_ON` 只在应用窗口可见时生效（前台或小窗）；要完全后台也不息屏得加前台服务
 - 手机锁屏或 App 退到后台时 CameraX 会解绑，画面就停了；想长期当摄像头用需要前台服务。此时服务仍会接受连接，但没有新帧，手机侧靠重发上一帧的保活写入识别走掉的观看者，最长 30 秒回收
 - 没有鉴权：同一网络里的任何设备都能拉流，别在公共或访客网络上开着服务
 - 只解析 IPv4 地址；多网卡时手机界面取到的是第一个非回环 IPv4
 - 帧率上限受手机编码能力影响，降 `JPEG_QUALITY`（当前 80）或降分辨率可以换更高帧率
-- 只支持后置摄像头（`DEFAULT_BACK_CAMERA`）
 - 电脑端 USB 方式依赖 adb；adb 不在 PATH 且没设 `ANDROID_HOME` 时，USB 面板会提示未找到
 
 ---

@@ -20,6 +20,8 @@
     <color name="accent_on">#06170A</color>
     <color name="warn">#F0A73C</color>
     <color name="danger">#E5534B</color>
+    <color name="ic_launcher_background">#15171B</color>
+
     <color name="info">#4A9EFF</color>
 
 </resources>

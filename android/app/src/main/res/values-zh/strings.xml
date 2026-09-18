@@ -10,6 +10,10 @@
     <string name="status_stopped">已停止</string>
     <string name="status_error">出错</string>
 
+    <string name="section_camera">摄像头</string>
+    <string name="camera_back">后置</string>
+    <string name="camera_front">前置</string>
+
     <string name="section_connection">连接方式</string>
     <string name="mode_wifi">Wi-Fi</string>
     <string name="mode_usb">USB 数据线</string>
@@ -39,6 +43,11 @@
     <string name="port_invalid">端口需要在 1024 到 65535 之间</string>
 
     <string name="lang_switch">English</string>
+
+    <string name="bg_title">切到后台？</string>
+    <string name="bg_message">退出会断开与电脑的连接；用小窗运行则继续推流。</string>
+    <string name="bg_exit">退出</string>
+    <string name="bg_keep">小窗运行</string>
 
     <plurals name="clients">
         <item quantity="other">%1$d 个客户端已连接</item>

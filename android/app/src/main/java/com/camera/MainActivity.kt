@@ -1,5 +1,7 @@
 package com.camera
 
+import android.app.AlertDialog
+import android.app.PictureInPictureParams
 import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -9,16 +11,20 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.BatteryManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.LocaleList
 import android.os.Looper
+import android.util.Rational
 import android.view.View
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -54,13 +60,21 @@ class MainActivity : ComponentActivity() {
 
         private const val PREFS_UI = "ui"
         private const val KEY_LANGUAGE = "lang"
+        private const val KEY_CAMERA = "camera"
+
+        private const val LENS_BACK = "back"
+        private const val LENS_FRONT = "front"
     }
 
     private lateinit var previewView: PreviewView
+    private lateinit var topBar: View
+    private lateinit var controls: View
     private lateinit var statusText: TextView
     private lateinit var statusDot: View
     private lateinit var wifiSegment: TextView
     private lateinit var usbSegment: TextView
+    private lateinit var backSegment: TextView
+    private lateinit var frontSegment: TextView
     private lateinit var wifiPanel: View
     private lateinit var usbPanel: View
     private lateinit var streamText: TextView
@@ -82,7 +96,13 @@ class MainActivity : ComponentActivity() {
 
     private var port = DEFAULT_PORT
 
+    private var lens = LENS_BACK
+
     private var streaming = false
+
+    private var inPictureInPicture = false
+
+    private var leaveDialog: AlertDialog? = null
 
     private val lastEncodeTime = AtomicLong(0L)
 
@@ -122,6 +142,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        lens = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getString(KEY_CAMERA, LENS_BACK) ?: LENS_BACK
+
         setContentView(R.layout.activity_main)
 
         initViews()
@@ -151,6 +174,7 @@ class MainActivity : ComponentActivity() {
 
         mainHandler.removeCallbacks(statusPoller)
 
+        runCatching { leaveDialog?.dismiss() }
         runCatching { unregisterReceiver(powerReceiver) }
         runCatching { cameraProvider?.unbindAll() }
         runCatching { mjpegServer?.stop() }
@@ -163,6 +187,8 @@ class MainActivity : ComponentActivity() {
 
     private fun initViews() {
         previewView = findViewById(R.id.previewView)
+        topBar = findViewById(R.id.topBar)
+        controls = findViewById(R.id.controls)
         statusText = findViewById(R.id.statusText)
         statusDot = findViewById(R.id.statusDot)
         wifiSegment = findViewById(R.id.wifiSegment)
@@ -177,13 +203,33 @@ class MainActivity : ComponentActivity() {
         hint = findViewById(R.id.wifiHint)
         actionButton = findViewById(R.id.actionButton)
         langButton = findViewById(R.id.langButton)
+        backSegment = findViewById(R.id.backSegment)
+        frontSegment = findViewById(R.id.frontSegment)
 
         portField.setText(port.toString())
+        renderLens()
+    }
+
+    private fun renderLens() {
+        val selected = ContextCompat.getDrawable(this, R.drawable.bg_segment_selected)
+        val active = ContextCompat.getColor(this, R.color.text_primary)
+        val inactive = ContextCompat.getColor(this, R.color.text_secondary)
+
+        backSegment.background = if (lens == LENS_BACK) selected else null
+        frontSegment.background = if (lens == LENS_FRONT) selected else null
+
+        backSegment.setTextColor(if (lens == LENS_BACK) active else inactive)
+        frontSegment.setTextColor(if (lens == LENS_FRONT) active else inactive)
     }
 
     private fun wireControls() {
         wifiSegment.setOnClickListener { showUsbMode(false) }
         usbSegment.setOnClickListener { showUsbMode(true) }
+
+        backSegment.setOnClickListener { selectLens(LENS_BACK) }
+        frontSegment.setOnClickListener { selectLens(LENS_FRONT) }
+
+        onBackPressedDispatcher.addCallback(this) { showLeaveChoice() }
 
         actionButton.setOnClickListener {
             if (mjpegServer == null) startServer() else stopServer()
@@ -242,15 +288,103 @@ class MainActivity : ComponentActivity() {
         usbSegment.setTextColor(if (usb) active else inactive)
     }
 
+    private fun selectLens(next: String) {
+        if (next == lens) return
+
+        lens = next
+
+        getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_CAMERA, lens)
+            .apply()
+
+        renderLens()
+        mjpegServer?.lens = lens
+
+        cameraProvider?.let { bindCamera(it) }
+    }
+
+    // ---------------- 小窗 / 退出 ----------------
+
+    private fun showLeaveChoice() {
+        if (mjpegServer == null) {
+            finishAndRemoveTask()
+            return
+        }
+
+        if (leaveDialog?.isShowing == true) return
+
+        leaveDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.bg_title)
+            .setMessage(R.string.bg_message)
+            .setNegativeButton(R.string.bg_exit) { _, _ ->
+                stopServer()
+                finishAndRemoveTask()
+            }
+            .setPositiveButton(R.string.bg_keep) { _, _ -> enterPip() }
+            .show()
+    }
+
+    private fun enterPip() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            moveTaskToBack(true)
+            return
+        }
+
+        val params = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(9, 16))
+            .build()
+
+        runCatching { enterPictureInPictureMode(params) }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+
+        if (mjpegServer == null || inPictureInPicture) return
+        if (leaveDialog?.isShowing == true) return
+
+        enterPip()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+
+        inPictureInPicture = isInPictureInPictureMode
+
+        val visibility = if (isInPictureInPictureMode) View.GONE else View.VISIBLE
+
+        topBar.visibility = visibility
+        controls.visibility = visibility
+    }
+
     // ---------------- server ----------------
+
+    private fun applyKeepScreenOn() {
+        val flags = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+
+        if (mjpegServer != null) window.addFlags(flags) else window.clearFlags(flags)
+    }
 
     private fun startServer() {
         if (mjpegServer != null) return
 
-        mjpegServer = MjpegServer(port).apply { start() }
+        mjpegServer = MjpegServer(port).apply {
+            lens = this@MainActivity.lens
+
+            onLens = { next ->
+                mainHandler.post { selectLens(next) }
+            }
+
+            start()
+        }
 
         mainHandler.postDelayed(statusPoller, POLL_INTERVAL_MS)
 
+        applyKeepScreenOn()
         renderConnectionInfo()
         updateActionButton()
     }
@@ -262,6 +396,7 @@ class MainActivity : ComponentActivity() {
         server.stop()
         mjpegServer = null
 
+        applyKeepScreenOn()
         renderConnectionInfo()
         updateActionButton()
     }
@@ -427,7 +562,11 @@ class MainActivity : ComponentActivity() {
         try {
             provider.bindToLifecycle(
                 this,
-                CameraSelector.DEFAULT_BACK_CAMERA,
+                if (lens == LENS_FRONT) {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                },
                 preview,
                 analysis
             )
@@ -476,7 +615,7 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun Context.withLanguage(tag: String): Context {
-    val locale = Locale(tag)
+    val locale = Locale.forLanguageTag(tag)
 
     Locale.setDefault(locale)
 

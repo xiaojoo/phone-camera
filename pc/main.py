@@ -1,9 +1,11 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from cv2.utils import logging as cv_logging
 from PySide6.QtCore import QLockFile, QDir, QSettings
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
@@ -17,6 +19,8 @@ from app_window import BridgeWindow
 from connection_panel import DEFAULT_PHONE_PORT, MODE_WIFI
 
 LOCK_NAME = "phone-camera-bridge.lock"
+
+ICON_PATH = Path(__file__).resolve().parent / "assets" / "app_icon.ico"
 
 # FFmpeg 每次读超时都会往控制台刷 WARN，界面已经报了状态，别让它看着像报错
 cv_logging.setLogLevel(cv_logging.LOG_LEVEL_ERROR)
@@ -61,6 +65,7 @@ def main():
     app.setApplicationName("PhoneCameraBridge")
     app.setStyleSheet(theme.STYLESHEET)
     app.setPalette(theme.palette())
+    app.setWindowIcon(QIcon(str(ICON_PATH)))
 
     settings = QSettings()
 

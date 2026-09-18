@@ -10,6 +10,10 @@
     <string name="status_stopped">STOPPED</string>
     <string name="status_error">ERROR</string>
 
+    <string name="section_camera">LENS</string>
+    <string name="camera_back">Rear</string>
+    <string name="camera_front">Front</string>
+
     <string name="section_connection">CONNECTION MODE</string>
     <string name="mode_wifi">Wi-Fi</string>
     <string name="mode_usb">USB cable</string>
@@ -39,6 +43,11 @@
     <string name="port_invalid">Port must be between 1024 and 65535</string>
 
     <string name="lang_switch">中文</string>
+
+    <string name="bg_title">Leave the app?</string>
+    <string name="bg_message">Quitting disconnects the PC. The small window keeps streaming.</string>
+    <string name="bg_exit">Quit</string>
+    <string name="bg_keep">Small window</string>
 
     <plurals name="clients">
         <item quantity="one">%d client connected</item>

@@ -51,6 +51,14 @@ class MjpegServer(
     val activeClients: Int
         get() = clients.get()
 
+    /*
+     * 当前镜头："back" 或 "front"，由 Activity 负责真正切换。
+     */
+    @Volatile
+    var lens: String = "back"
+
+    var onLens: ((String) -> Unit)? = null
+
     private val latestFrame =
         AtomicReference<ByteArray?>(null)
 
@@ -241,6 +249,12 @@ class MjpegServer(
                     path == "/status" -> {
 
                         sendStatus(socket)
+                    }
+
+                    path == "/camera" ||
+                            path.startsWith("/camera?") -> {
+
+                        sendCamera(socket, path)
                     }
 
                     else -> {
@@ -483,7 +497,44 @@ class MjpegServer(
                 "ip": "$ip",
                 "port": $port,
                 "clients": ${clients.get()},
+                "camera": "$lens",
                 "stream": "http://$ip:$port/video"
+            }
+        """.trimIndent()
+
+        sendResponse(
+            socket,
+            "200 OK",
+            "application/json; charset=utf-8",
+            body.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    /*
+     * GET /camera              -> 返回当前镜头
+     * GET /camera?face=front   -> 切到前置并返回
+     * GET /camera?face=back    -> 切到后置并返回
+     */
+    private fun sendCamera(
+        socket: Socket,
+        path: String
+    ) {
+
+        when (path.substringAfter("face=", "")) {
+            "front" -> {
+                lens = "front"
+                onLens?.invoke("front")
+            }
+
+            "back" -> {
+                lens = "back"
+                onLens?.invoke("back")
+            }
+        }
+
+        val body = """
+            {
+                "camera": "$lens"
             }
         """.trimIndent()
 

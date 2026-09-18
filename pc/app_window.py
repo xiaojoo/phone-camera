@@ -1,3 +1,5 @@
+import json
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -44,6 +46,8 @@ class BridgeWindow(QMainWindow):
         self._forward_task: BackgroundTask | None = None
         self._status_key = "status.ready"
         self._status_fields: dict = {}
+        self._lens_now = "back"
+        self._lens_task: BackgroundTask | None = None
 
         self._build_ui()
         self._apply_shortcuts()
@@ -113,10 +117,19 @@ class BridgeWindow(QMainWindow):
         self._language.setCursor(Qt.PointingHandCursor)
         self._language.clicked.connect(self._switch_language)
 
+        self._lens = QPushButton()
+        self._lens.setObjectName("IconToggle")
+        self._lens.setCursor(Qt.PointingHandCursor)
+        self._lens.setToolTip(i18n.tr("lens.tip"))
+        self._lens.setEnabled(False)
+        self._lens.clicked.connect(self._switch_lens)
+        self._set_lens(self._lens_now)
+
         header.addWidget(self._stage_title)
         header.addSpacing(10)
         header.addWidget(self._stage_subtitle)
         header.addStretch(1)
+        header.addWidget(self._lens)
         header.addWidget(self._language)
         header.addWidget(self._snapshot)
         header.addWidget(self._fullscreen)
@@ -250,7 +263,12 @@ class BridgeWindow(QMainWindow):
         self._video.set_state(phase, key, fields)
         self._status.setText(i18n.tr(key, **fields))
 
+        if phase == Phase.LIVE:
+            self._lens.setEnabled(True)
+            self._refresh_lens()
+
         if phase in (Phase.FAILED, Phase.STOPPED):
+            self._lens.setEnabled(False)
             self._metrics.reset()
 
             if self._active is not None:
@@ -275,12 +293,64 @@ class BridgeWindow(QMainWindow):
         self._fullscreen.setText(i18n.tr("view.fullscreen"))
         self._fullscreen.setToolTip(i18n.tr("view.fullscreenTip"))
         self._language.setText(i18n.tr("lang.toggle"))
+        self._lens.setToolTip(i18n.tr("lens.tip"))
+        self._set_lens(self._lens_now)
 
         self._panel.retranslate()
         self._metrics.retranslate()
         self._video.retranslate()
 
         self._status.setText(i18n.tr(self._status_key, **self._status_fields))
+
+    # ---------------- camera ----------------
+
+    def _set_lens(self, value: str) -> None:
+        self._lens_now = value if value in ("front", "back") else "back"
+
+        other = "lens.back" if self._lens_now == "front" else "lens.front"
+        self._lens.setText(i18n.tr("lens.switch", lens=i18n.tr(other)))
+
+    def _phone_get(self, url: str) -> dict:
+        with urllib.request.urlopen(url, timeout=3) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    def _base_url(self) -> str:
+        return self._active.url.rsplit("/", 1)[0]
+
+    def _refresh_lens(self) -> None:
+        if self._active is None:
+            return
+
+        self._lens_task = BackgroundTask(self._phone_get, self._base_url() + "/status")
+        self._lens_task.finished_with.connect(self._on_lens_info)
+        self._lens_task.start()
+
+    def _on_lens_info(self, result) -> None:
+        if isinstance(result, dict):
+            self._set_lens(result.get("camera", ""))
+
+    def _switch_lens(self) -> None:
+        if self._active is None:
+            self._set_status("lens.needSession")
+            return
+
+        target = "back" if self._lens_now == "front" else "front"
+
+        self._lens.setEnabled(False)
+        self._lens_task = BackgroundTask(
+            self._phone_get, f"{self._base_url()}/camera?face={target}"
+        )
+        self._lens_task.finished_with.connect(self._on_lens_switched)
+        self._lens_task.start()
+
+    def _on_lens_switched(self, result) -> None:
+        self._lens.setEnabled(self._active is not None)
+
+        if isinstance(result, dict):
+            self._set_lens(result.get("camera", ""))
+            return
+
+        self._set_status("lens.failed", detail=str(result))
 
     # ---------------- view actions ----------------
 
