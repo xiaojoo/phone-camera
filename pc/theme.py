@@ -124,8 +124,10 @@ QComboBox QAbstractItemView {{
     border: 1px solid {BORDER_STRONG};
     border-radius: 6px;
     outline: none;
-    selection-background-color: {BORDER_STRONG};
     color: {TEXT_SECONDARY};
+    /* 高亮条由 DeviceCombo 的 delegate 画，样式那边不要再用调色板画方块 */
+    selection-background-color: transparent;
+    selection-color: {TEXT};
 }}
 
 #AddressField {{ font-family: {MONO}; }}

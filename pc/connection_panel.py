@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPointF, Qt, QThread, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QPalette, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSpinBox,
     QStackedWidget,
+    QStyle,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -63,10 +65,46 @@ def section(key: str) -> QLabel:
     return label
 
 
+class PopupDelegate(QStyledItemDelegate):
+    """样式会用调色板把选中项画成顶到边的方块，这里画成带圆角的条。"""
+
+    MASK = (QStyle.StateFlag.State_Selected
+            | QStyle.StateFlag.State_MouseOver).value
+
+    def paint(self, painter, option, index) -> None:
+        selected = QStyle.StateFlag.State_Selected in option.state
+        hovered = QStyle.StateFlag.State_MouseOver in option.state
+
+        if selected or hovered:
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(
+                QColor(theme.ACCENT_DIM if selected else theme.CARD_HOVER)
+            )
+            painter.drawRoundedRect(option.rect.adjusted(4, 1, -4, -1), 5, 5)
+            painter.restore()
+
+            option.state = QStyle.State(option.state.value & ~self.MASK)
+
+            colors = option.palette
+            colors.setColor(
+                QPalette.ColorRole.Text,
+                QColor(theme.TEXT if selected else theme.TEXT_SECONDARY),
+            )
+            option.palette = colors
+
+        super().paint(painter, option, index)
+
+
 class DeviceCombo(QComboBox):
     """QSS 一旦定义 ::drop-down，Qt 就不再画原生箭头，只能自己补一个。"""
 
     INSET = 17          # 让箭头到右边的留白与文字到左边的 12px 对齐
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setItemDelegate(PopupDelegate(self))
 
     def paintEvent(self, event) -> None:
         super().paintEvent(event)
