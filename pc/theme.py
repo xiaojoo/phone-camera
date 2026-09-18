@@ -259,9 +259,11 @@ QStatusBar {{
 
 QStatusBar::item {{ border: none; }}
 
-/* 状态栏里的 QLabel 会被全局 QWidget 规则直接命中，父级的 font-size 传不下去 */
+/* 状态栏里的 QLabel 会被全局 QWidget 规则直接命中，父级的 font-size 传不下去；
+   QStatusBar 自己的 padding 又不作用于条目布局，所以留白加在 label 上 */
 QStatusBar QLabel {{
     font-size: 11px;
+    padding: 4px 0px 4px 10px;
 }}
 
 QToolTip {{
