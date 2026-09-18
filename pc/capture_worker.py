@@ -22,7 +22,7 @@ class CaptureWorker(QThread):
 
     MAX_CONNECT_ATTEMPTS = 3
     RECONNECT_DELAY = 1.0
-    STOP_WAIT_MS = 6000
+    STOP_WAIT_MS = 9000
 
     def __init__(self, parent=None):
         super().__init__(parent)

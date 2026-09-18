@@ -74,6 +74,9 @@ TABLES = {
         "error.adbMissing": "本机没有找到 adb 可执行文件。",
         "error.noDevice": "没有选择 USB 设备。插好数据线后点刷新。",
         "error.forward": "adb forward 失败，手机可能没有授权 USB 调试。{detail}",
+        "error.alreadyRunning": "已经有一个桥接窗口在运行了。\n"
+                                 "两个实例抢同一个本机端口会互相打断对方的视频流，"
+                                 "请先关掉另一个。",
 
         "status.chooseMode": "请选择一种连接方式",
         "status.noFrame": "还没有可截图的画面",
@@ -168,6 +171,9 @@ TABLES = {
         "error.noDevice": "No USB device selected. Plug in the cable and press Refresh.",
         "error.forward": "adb forward failed. The phone may not be authorised for "
                          "USB debugging. {detail}",
+        "error.alreadyRunning": "Another bridge window is already running.\n"
+                                "Two instances sharing one local port keep tearing "
+                                "down each other's stream. Close the other one first.",
 
         "status.chooseMode": "Choose a connection mode",
         "status.noFrame": "No frame to capture yet",

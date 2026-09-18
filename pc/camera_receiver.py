@@ -28,6 +28,10 @@ class PhoneCameraReceiver:
 
             cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG, params)
 
+            if should_stop is not None and should_stop():
+                cap.release()
+                break
+
             if cap.isOpened():
                 ret, frame = cap.read()
 
@@ -38,6 +42,10 @@ class PhoneCameraReceiver:
                     return True
 
             cap.release()
+
+            if should_stop is not None and should_stop():
+                break
+
             time.sleep(0.2)
 
         self.cap = None

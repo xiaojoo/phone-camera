@@ -1,5 +1,6 @@
 package com.camera
 
+import android.os.SystemClock
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStream
@@ -24,6 +25,18 @@ class MjpegServer(
 
         private const val CONTENT_TYPE =
             "multipart/x-mixed-replace; boundary=$BOUNDARY"
+
+        /*
+         * 没有新帧时，隔一会儿重发上一帧，
+         * 顺便靠这次写入发现客户端已经走了。
+         */
+        private const val KEEPALIVE_MS = 2000L
+
+        /*
+         * 连一帧都没有过（比如相机没起来）的观看者，
+         * 超过这个时间直接断开。
+         */
+        private const val DEAD_AFTER_MS = 30_000L
     }
 
     private val running =
@@ -312,56 +325,91 @@ class MjpegServer(
         try {
 
             var lastFrame: ByteArray? = null
+            var lastSend = SystemClock.elapsedRealtime()
 
             while (running.get()) {
 
                 val frame =
                     latestFrame.get()
 
+                val now =
+                    SystemClock.elapsedRealtime()
+
                 if (
                     frame == null ||
                     frame === lastFrame
                 ) {
+
+                    if (now - lastSend > DEAD_AFTER_MS) {
+                        break
+                    }
+
+                    val stale = lastFrame
+
+                    if (
+                        stale != null &&
+                        now - lastSend > KEEPALIVE_MS
+                    ) {
+
+                        /*
+                         * 没有新帧也要写一次：
+                         * 对端已经断开的话，这里才会拿到异常。
+                         */
+                        writePart(output, stale)
+
+                        lastSend = now
+
+                        continue
+                    }
 
                     Thread.sleep(5)
 
                     continue
                 }
 
-                val partHeader = buildString {
-
-                    append("--$BOUNDARY\r\n")
-
-                    append(
-                        "Content-Type: image/jpeg\r\n"
-                    )
-
-                    append(
-                        "Content-Length: ${frame.size}\r\n"
-                    )
-
-                    append("\r\n")
-                }
-
-                output.write(
-                    partHeader.toByteArray(Charsets.UTF_8)
-                )
-
-                output.write(frame)
-
-                output.write(
-                    "\r\n".toByteArray(Charsets.UTF_8)
-                )
-
-                output.flush()
+                writePart(output, frame)
 
                 lastFrame = frame
+                lastSend = now
             }
 
         } finally {
 
             clients.decrementAndGet()
         }
+    }
+
+    private fun writePart(
+        output: OutputStream,
+        frame: ByteArray
+    ) {
+
+        val partHeader = buildString {
+
+            append("--$BOUNDARY\r\n")
+
+            append(
+                "Content-Type: image/jpeg\r\n"
+            )
+
+            append(
+                "Content-Length: ${frame.size}\r\n"
+            )
+
+            append("\r\n")
+        }
+
+        output.write(
+            partHeader.toByteArray(Charsets.UTF_8)
+        )
+
+        output.write(frame)
+
+        output.write(
+            "\r\n".toByteArray(Charsets.UTF_8)
+        )
+
+        output.flush()
     }
 
     private fun sendIndex(

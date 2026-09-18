@@ -1,14 +1,25 @@
 import argparse
+import os
 import sys
 
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QApplication, QStyleFactory
+from cv2.utils import logging as cv_logging
+from PySide6.QtCore import QLockFile, QDir, QSettings
+from PySide6.QtWidgets import (
+    QApplication,
+    QMessageBox,
+    QStyleFactory,
+)
 
 import i18n
 import theme
 from adb_bridge import AdbBridge
 from app_window import BridgeWindow
 from connection_panel import DEFAULT_PHONE_PORT, MODE_WIFI
+
+LOCK_NAME = "phone-camera-bridge.lock"
+
+# FFmpeg 每次读超时都会往控制台刷 WARN，界面已经报了状态，别让它看着像报错
+cv_logging.setLogLevel(cv_logging.LOG_LEVEL_ERROR)
 
 
 def parse_args():
@@ -57,6 +68,18 @@ def main():
         or settings.value("ui/language", "")
         or i18n.default_code()
     )
+
+    lock = QLockFile(os.path.join(QDir.tempPath(), LOCK_NAME))
+
+    if not lock.tryLock(100):
+        QMessageBox.warning(
+            None,
+            i18n.tr("app.title"),
+            i18n.tr("error.alreadyRunning"),
+        )
+        return 1
+
+    app._instance_lock = lock
 
     window = BridgeWindow(settings, AdbBridge())
 
