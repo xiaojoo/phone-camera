@@ -259,6 +259,11 @@ QStatusBar {{
 
 QStatusBar::item {{ border: none; }}
 
+/* 状态栏里的 QLabel 会被全局 QWidget 规则直接命中，父级的 font-size 传不下去 */
+QStatusBar QLabel {{
+    font-size: 11px;
+}}
+
 QToolTip {{
     background: {CARD};
     color: {TEXT};
