@@ -157,6 +157,8 @@ class ConnectionPanel(QWidget):
         self._t(self._hint, "footer.hint")
         root.addWidget(self._hint)
 
+        root.addStretch(1)
+
     def _build_mode_switch(self) -> QWidget:
         bar = QFrame()
         bar.setObjectName("ModeSwitch")
@@ -192,7 +194,7 @@ class ConnectionPanel(QWidget):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 4, 0, 0)
-        layout.setSpacing(7)
+        layout.setSpacing(10)
 
         layout.addWidget(self._label("wifi.address"))
 
