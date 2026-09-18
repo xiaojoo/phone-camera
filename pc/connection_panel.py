@@ -235,6 +235,7 @@ class ConnectionPanel(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
         grid.setVerticalSpacing(6)
+        grid.setColumnStretch(1, 1)
 
         self._adb_value = QLabel(i18n.tr("adb.searching"))
         self._adb_value.setObjectName("MonoCaption")
