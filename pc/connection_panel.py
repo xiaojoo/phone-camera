@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QPointF, Qt, QThread, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -61,6 +61,34 @@ def section(key: str) -> QLabel:
     label.setFont(font)
 
     return label
+
+
+class DeviceCombo(QComboBox):
+    """QSS 一旦定义 ::drop-down，Qt 就不再画原生箭头，只能自己补一个。"""
+
+    INSET = 17          # 让箭头到右边的留白与文字到左边的 12px 对齐
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+
+        color = QColor(theme.TEXT_SECONDARY if self.isEnabled() else theme.TEXT_MUTED)
+        pen = QPen(color)
+        pen.setWidthF(1.4)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(pen)
+
+        center_x = self.width() - self.INSET
+        center_y = self.height() / 2
+
+        painter.drawPolyline(QPolygonF([
+            QPointF(center_x - 4, center_y - 2),
+            QPointF(center_x, center_y + 2),
+            QPointF(center_x + 4, center_y - 2),
+        ]))
 
 
 class ConnectionPanel(QWidget):
@@ -244,7 +272,7 @@ class ConnectionPanel(QWidget):
         grid.addWidget(self._adb_value, 0, 1)
 
         grid.addWidget(self._label("usb.device"), 1, 0)
-        self._devices = QComboBox()
+        self._devices = DeviceCombo()
         self._devices.setMinimumHeight(30)
         grid.addWidget(self._devices, 1, 1)
 

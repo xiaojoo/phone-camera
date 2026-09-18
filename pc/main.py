@@ -60,6 +60,7 @@ def main():
     app.setOrganizationName("PhoneCamera")
     app.setApplicationName("PhoneCameraBridge")
     app.setStyleSheet(theme.STYLESHEET)
+    app.setPalette(theme.palette())
 
     settings = QSettings()
 

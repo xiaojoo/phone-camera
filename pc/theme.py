@@ -1,5 +1,7 @@
 import sys
 
+from PySide6.QtGui import QPalette
+
 BG = "#0D0E10"
 PANEL = "#15171B"
 CARD = "#1C1F25"
@@ -288,6 +290,29 @@ PHASE_COLORS = {
 
 def dot_style(color: str) -> str:
     return f"background: {color}; border-radius: 4px;"
+
+
+def palette() -> QPalette:
+    """样式表管不到的原生部件（下拉箭头、弹出列表滚动条）靠调色板取色。"""
+    pal = QPalette()
+
+    for role, hex_color in (
+        (QPalette.ColorRole.Window, PANEL),
+        (QPalette.ColorRole.Base, CARD),
+        (QPalette.ColorRole.AlternateBase, CARD_HOVER),
+        (QPalette.ColorRole.Button, PANEL),
+        (QPalette.ColorRole.ToolTipBase, CARD),
+        (QPalette.ColorRole.Text, TEXT),
+        (QPalette.ColorRole.WindowText, TEXT),
+        (QPalette.ColorRole.ButtonText, TEXT),
+        (QPalette.ColorRole.PlaceholderText, TEXT_MUTED),
+        (QPalette.ColorRole.ToolTipText, TEXT_SECONDARY),
+        (QPalette.ColorRole.Highlight, ACCENT_DIM),
+        (QPalette.ColorRole.HighlightedText, TEXT),
+    ):
+        pal.setColor(role, hex_color)
+
+    return pal
 
 
 def _colorref(hex_color: str) -> int:
