@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+
+    <string name="app_name">PhoneCamera</string>
+
+    <string name="status_starting">STARTING</string>
+    <string name="status_streaming">STREAMING</string>
+    <string name="status_waiting">WAITING</string>
+    <string name="status_stopped">STOPPED</string>
+    <string name="status_error">ERROR</string>
+
+    <string name="section_connection">CONNECTION MODE</string>
+    <string name="mode_wifi">Wi-Fi</string>
+    <string name="mode_usb">USB cable</string>
+
+    <string name="label_address">Stream address</string>
+    <string name="label_port">Port</string>
+    <string name="label_cable">USB cable</string>
+    <string name="label_debugging">USB debugging</string>
+
+    <string name="value_none">—</string>
+
+    <string name="cable_connected">Connected</string>
+    <string name="cable_disconnected">Not connected</string>
+    <string name="debugging_hint">Check with: adb devices</string>
+
+    <string name="wifi_hint">Open this address on a PC in the same Wi-Fi network.</string>
+    <string name="wifi_no_network">No Wi-Fi address yet. Join a network on the phone.</string>
+    <string name="hint_server_stopped">The stream server is stopped. Press Start server to listen again.</string>
+    <string name="usb_hint">Plug in the data cable and enable USB debugging. The PC bridge sets the forward for you.</string>
+
+    <string name="action_start">Start server</string>
+    <string name="action_stop">Stop server</string>
+    <string name="action_copy">Copy</string>
+
+    <string name="copied">Copied to clipboard</string>
+    <string name="permission_denied">Camera permission is required to stream.</string>
+    <string name="port_invalid">Port must be between 1024 and 65535</string>
+
+    <string name="lang_switch">中文</string>
+
+    <plurals name="clients">
+        <item quantity="one">%d client connected</item>
+        <item quantity="other">%d clients connected</item>
+    </plurals>
+
+</resources>

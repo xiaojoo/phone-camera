@@ -1,0 +1,478 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+
+    android:background="@color/bg"
+    android:orientation="vertical">
+
+
+    <!-- 顶栏：标题 + 服务状态胶囊 -->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+
+        android:gravity="center_vertical"
+
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp">
+
+        <TextView
+            android:id="@+id/titleText"
+
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+
+            android:text="@string/app_name"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+
+            android:background="@drawable/bg_button_ghost"
+
+            android:gravity="center_vertical"
+
+            android:paddingStart="13dp"
+            android:paddingEnd="13dp">
+
+            <View
+                android:id="@+id/statusDot"
+
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+
+                android:layout_marginEnd="8dp"
+
+                android:background="@drawable/dot_status" />
+
+            <TextView
+                android:id="@+id/statusText"
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:letterSpacing="0.08"
+                android:text="@string/status_starting"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/langButton"
+
+            android:layout_width="wrap_content"
+            android:layout_height="32dp"
+
+            android:layout_marginStart="10dp"
+
+            android:background="@drawable/bg_button_ghost"
+
+            android:gravity="center"
+
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+
+            android:text="@string/lang_switch"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+
+    <!-- 取景预览 -->
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="14dp"
+
+        android:background="@color/black"
+
+        app:implementationMode="performance"
+        app:scaleType="fitCenter" />
+
+
+    <!-- 连接方式 -->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+
+        android:orientation="vertical"
+
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="20dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            android:layout_marginBottom="8dp"
+
+            android:letterSpacing="0.14"
+            android:text="@string/section_connection"
+            android:textColor="@color/text_muted"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="46dp"
+
+            android:background="@drawable/bg_segment_group"
+
+            android:orientation="horizontal"
+
+            android:padding="3dp">
+
+            <TextView
+                android:id="@+id/wifiSegment"
+
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+
+                android:background="@drawable/bg_segment_selected"
+                android:clickable="true"
+                android:focusable="true"
+
+                android:gravity="center"
+
+                android:text="@string/mode_wifi"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/usbSegment"
+
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+
+                android:clickable="true"
+                android:focusable="true"
+
+                android:gravity="center"
+
+                android:text="@string/mode_usb"
+                android:textColor="@color/text_secondary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+
+        <!-- Wi-Fi 详情 -->
+
+        <LinearLayout
+            android:id="@+id/wifiPanel"
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="12dp"
+
+            android:background="@drawable/bg_card"
+
+            android:orientation="vertical"
+
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+
+                    android:text="@string/label_address"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/clientsText"
+
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+
+                    android:text="@string/value_none"
+                    android:textColor="@color/accent"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/streamText"
+
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+
+                    android:background="@drawable/bg_field"
+                    android:fontFamily="monospace"
+                    android:padding="10dp"
+
+                    android:text="@string/value_none"
+                    android:textColor="@color/text_primary"
+                    android:textIsSelectable="true"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/copyUrlButton"
+
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+
+                    android:layout_marginStart="8dp"
+
+                    android:background="@drawable/bg_button_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+
+                    android:text="@string/action_copy"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+
+                    android:text="@string/label_port"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/portField"
+
+                    android:layout_width="92dp"
+                    android:layout_height="38dp"
+
+                    android:background="@drawable/bg_field"
+                    android:fontFamily="monospace"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:maxLength="5"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/wifiHint"
+
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+
+                android:lineSpacingExtra="2dp"
+                android:text="@string/wifi_hint"
+                android:textColor="@color/text_muted"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+
+        <!-- USB 详情 -->
+
+        <LinearLayout
+            android:id="@+id/usbPanel"
+
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+
+            android:layout_marginTop="12dp"
+            android:visibility="gone"
+
+            android:background="@drawable/bg_card"
+
+            android:orientation="vertical"
+
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+
+                    android:text="@string/label_cable"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/cableText"
+
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+
+                    android:text="@string/cable_disconnected"
+                    android:textColor="@color/danger"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+
+                    android:text="@string/label_debugging"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+
+                    android:text="@string/debugging_hint"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/adbCommand"
+
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+
+                    android:background="@drawable/bg_field"
+                    android:fontFamily="monospace"
+                    android:padding="10dp"
+
+                    android:textColor="@color/text_primary"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/copyCommandButton"
+
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+
+                    android:layout_marginStart="8dp"
+
+                    android:background="@drawable/bg_button_ghost"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+
+                    android:text="@string/action_copy"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+
+                android:layout_marginTop="12dp"
+
+                android:lineSpacingExtra="2dp"
+                android:text="@string/usb_hint"
+                android:textColor="@color/text_muted"
+                android:textSize="12sp" />
+
+        </LinearLayout>
+
+
+        <Button
+            android:id="@+id/actionButton"
+
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+
+            android:layout_marginTop="14dp"
+
+            android:background="@drawable/bg_button_primary"
+            android:stateListAnimator="@null"
+            android:textAllCaps="false"
+
+            android:text="@string/action_stop"
+            android:textColor="@color/accent_on"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+</LinearLayout>

@@ -1,0 +1,10 @@
+* text=auto
+
+# 在 Linux/macOS 上 clone 时 CRLF 会让脚本无法执行
+gradlew text eol=lf
+*.bat text eol=crlf
+*.sh  text eol=lf
+
+*.jar binary
+*.png binary
+*.apk binary

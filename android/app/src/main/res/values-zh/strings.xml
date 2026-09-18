@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+
+    <string name="app_name">手机摄像头</string>
+
+    <string name="status_starting">启动中</string>
+    <string name="status_streaming">推流中</string>
+    <string name="status_waiting">等待连接</string>
+    <string name="status_stopped">已停止</string>
+    <string name="status_error">出错</string>
+
+    <string name="section_connection">连接方式</string>
+    <string name="mode_wifi">Wi-Fi</string>
+    <string name="mode_usb">USB 数据线</string>
+
+    <string name="label_address">推流地址</string>
+    <string name="label_port">端口</string>
+    <string name="label_cable">USB 数据线</string>
+    <string name="label_debugging">USB 调试</string>
+
+    <string name="value_none">—</string>
+
+    <string name="cable_connected">已连接</string>
+    <string name="cable_disconnected">未连接</string>
+    <string name="debugging_hint">可在电脑上用 adb devices 查看</string>
+
+    <string name="wifi_hint">在同一个 Wi-Fi 网络下的电脑上打开这个地址。</string>
+    <string name="wifi_no_network">还没有 Wi-Fi 地址，请先让手机连上网络。</string>
+    <string name="hint_server_stopped">流服务已停止，点“启动服务”重新开始监听。</string>
+    <string name="usb_hint">插好数据线并开启 USB 调试，电脑端的桥接程序会自动设置端口转发。</string>
+
+    <string name="action_start">启动服务</string>
+    <string name="action_stop">停止服务</string>
+    <string name="action_copy">复制</string>
+
+    <string name="copied">已复制到剪贴板</string>
+    <string name="permission_denied">需要相机权限才能推流。</string>
+    <string name="port_invalid">端口需要在 1024 到 65535 之间</string>
+
+    <string name="lang_switch">English</string>
+
+    <plurals name="clients">
+        <item quantity="other">%1$d 个客户端已连接</item>
+    </plurals>
+
+</resources>

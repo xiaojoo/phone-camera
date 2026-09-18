@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Android / Gradle 构建产物
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# 本机路径与 IDE
+android/local.properties
+.idea/
+.vscode/
+*.iml
+
+# 运行时输出
+pc/snapshots/
+*.log
