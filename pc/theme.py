@@ -1,3 +1,5 @@
+import sys
+
 BG = "#0D0E10"
 PANEL = "#15171B"
 CARD = "#1C1F25"
@@ -286,3 +288,26 @@ PHASE_COLORS = {
 
 def dot_style(color: str) -> str:
     return f"background: {color}; border-radius: 4px;"
+
+
+def _colorref(hex_color: str) -> int:
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return b << 16 | g << 8 | r
+
+
+def apply_dark_title_bar(hwnd: int) -> None:
+    """Qt 管不到非客户区，标题栏只能让 Windows 的 DWM 来染色。"""
+    if sys.platform != "win32":
+        return
+
+    from ctypes import byref, c_int, c_ulong, sizeof, windll
+
+    dark = c_int(1)
+    windll.dwmapi.DwmSetWindowAttribute(hwnd, 20, byref(dark), sizeof(dark))
+
+    for attribute, hex_color in ((35, BG), (36, TEXT)):
+        # Windows 10 上没有这两个属性，失败直接忽略
+        color = c_ulong(_colorref(hex_color))
+        windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, attribute, byref(color), sizeof(color)
+        )

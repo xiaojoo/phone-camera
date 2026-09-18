@@ -324,6 +324,10 @@ class BridgeWindow(QMainWindow):
         else:
             self.showNormal()
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        theme.apply_dark_title_bar(int(self.winId()))
+
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key_Escape and self.isFullScreen():
             self._fullscreen.setChecked(False)
