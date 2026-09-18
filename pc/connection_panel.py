@@ -27,6 +27,8 @@ MODE_USB = "usb"
 
 DEFAULT_PHONE_PORT = 8080
 
+FIELD_HEIGHT = 38
+
 
 @dataclass
 class ConnectionRequest:
@@ -210,6 +212,10 @@ class ConnectionPanel(QWidget):
         self._pages.addWidget(self._build_usb_page())
         root.addWidget(self._pages)
 
+        for field in (self._host, self._wifi_port, self._devices,
+                      self._remote_port, self._local_port):
+            field.setFixedHeight(FIELD_HEIGHT)
+
         root.addWidget(self._build_action_card())
 
         self._session_caption = section("section.session")
@@ -300,7 +306,7 @@ class ConnectionPanel(QWidget):
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(10)
-        grid.setVerticalSpacing(6)
+        grid.setVerticalSpacing(10)
         grid.setColumnStretch(1, 1)
 
         self._adb_value = QLabel(i18n.tr("adb.searching"))
@@ -311,7 +317,6 @@ class ConnectionPanel(QWidget):
 
         grid.addWidget(self._label("usb.device"), 1, 0)
         self._devices = DeviceCombo()
-        self._devices.setMinimumHeight(30)
         grid.addWidget(self._devices, 1, 1)
 
         grid.addWidget(self._label("usb.phonePort"), 2, 0)
