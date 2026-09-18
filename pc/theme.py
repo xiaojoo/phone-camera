@@ -107,8 +107,15 @@ QLineEdit, QComboBox, QSpinBox {{
     selection-background-color: {ACCENT_DIM};
 }}
 
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
-    border: 1px solid {ACCENT};
+QLineEdit:focus, QSpinBox:focus {{
+    /* 只改颜色：写 border 简写会重建盒模型、丢掉上面的 padding */
+    border-color: {ACCENT};
+    outline: none;
+}}
+
+/* 下拉框点击时不画焦点边框：弹层本身就是反馈，画了会让框子看起来变了尺寸 */
+QComboBox:focus {{
+    border-color: {BORDER};
     outline: none;
 }}
 
@@ -126,6 +133,7 @@ QComboBox QAbstractItemView {{
     background: {CARD};
     border: 1px solid {BORDER_STRONG};
     border-radius: 6px;
+    padding: 4px;
     outline: none;
     color: {TEXT_SECONDARY};
     /* 高亮条由 DeviceCombo 的 delegate 画，样式那边不要再用调色板画方块 */

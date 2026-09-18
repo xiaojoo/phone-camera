@@ -68,10 +68,16 @@ def section(key: str) -> QLabel:
 
 
 class PopupDelegate(QStyledItemDelegate):
-    """样式会用调色板把选中项画成顶到边的方块，这里画成带圆角的条。"""
+    """弹层画成菜单的样子：行高、分隔线、圆角高亮条。"""
 
+    ROW_HEIGHT = 30
     MASK = (QStyle.StateFlag.State_Selected
             | QStyle.StateFlag.State_MouseOver).value
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(max(size.height(), self.ROW_HEIGHT))
+        return size
 
     def paint(self, painter, option, index) -> None:
         selected = QStyle.StateFlag.State_Selected in option.state
@@ -97,6 +103,14 @@ class PopupDelegate(QStyledItemDelegate):
             option.palette = colors
 
         super().paint(painter, option, index)
+
+        if index.row() + 1 < index.model().rowCount(index.parent()):
+            painter.save()
+            painter.setPen(QPen(QColor(theme.BORDER)))
+            bottom = option.rect.bottom()
+            painter.drawLine(option.rect.left() + 8, bottom,
+                             option.rect.right() - 8, bottom)
+            painter.restore()
 
 
 class DeviceCombo(QComboBox):
