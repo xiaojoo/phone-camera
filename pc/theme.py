@@ -102,6 +102,9 @@ QLineEdit, QComboBox, QSpinBox {{
     border-radius: 7px;
     color: {TEXT};
     padding: 7px 10px;
+    /* 19 + 上下 padding 14 + 边框 2 = 35px，与设备下拉框原本的高度一致 */
+    min-height: 19px;
+    max-height: 19px;
     selection-background-color: {ACCENT_DIM};
 }}
 
