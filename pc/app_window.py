@@ -83,7 +83,7 @@ class BridgeWindow(QMainWindow):
         stage.setObjectName("Stage")
 
         layout = QVBoxLayout(stage)
-        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setContentsMargins(0, 18, 22, 18)
         layout.setSpacing(12)
 
         header = QHBoxLayout()
