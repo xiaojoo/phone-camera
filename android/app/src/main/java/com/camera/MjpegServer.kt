@@ -59,6 +59,14 @@ class MjpegServer(
 
     var onLens: ((String) -> Unit)? = null
 
+    /*
+     * 补光开关，同样由 Activity 负责真正点亮。
+     */
+    @Volatile
+    var light: Boolean = false
+
+    var onLight: ((Boolean) -> Unit)? = null
+
     private val latestFrame =
         AtomicReference<ByteArray?>(null)
 
@@ -255,6 +263,12 @@ class MjpegServer(
                             path.startsWith("/camera?") -> {
 
                         sendCamera(socket, path)
+                    }
+
+                    path == "/torch" ||
+                            path.startsWith("/torch?") -> {
+
+                        sendTorch(socket, path)
                     }
 
                     else -> {
@@ -498,6 +512,7 @@ class MjpegServer(
                 "port": $port,
                 "clients": ${clients.get()},
                 "camera": "$lens",
+                "light": ${light},
                 "stream": "http://$ip:$port/video"
             }
         """.trimIndent()
@@ -535,6 +550,42 @@ class MjpegServer(
         val body = """
             {
                 "camera": "$lens"
+            }
+        """.trimIndent()
+
+        sendResponse(
+            socket,
+            "200 OK",
+            "application/json; charset=utf-8",
+            body.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    /*
+     * GET /torch        -> 返回当前补光状态
+     * GET /torch?on=1   -> 打开补光
+     * GET /torch?on=0   -> 关闭补光
+     */
+    private fun sendTorch(
+        socket: Socket,
+        path: String
+    ) {
+
+        when (path.substringAfter("on=", "")) {
+            "1", "true" -> {
+                light = true
+                onLight?.invoke(true)
+            }
+
+            "0", "false" -> {
+                light = false
+                onLight?.invoke(false)
+            }
+        }
+
+        val body = """
+            {
+                "light": ${light}
             }
         """.trimIndent()
 

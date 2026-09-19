@@ -26,6 +26,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var usbSegment: TextView
     private lateinit var backSegment: TextView
     private lateinit var frontSegment: TextView
+    private lateinit var lightButton: TextView
     private lateinit var wifiPanel: View
     private lateinit var usbPanel: View
     private lateinit var streamText: TextView
@@ -97,6 +99,10 @@ class MainActivity : ComponentActivity() {
     private var port = DEFAULT_PORT
 
     private var lens = LENS_BACK
+
+    private var camera: Camera? = null
+
+    private var lightOn = false
 
     private var streaming = false
 
@@ -205,6 +211,7 @@ class MainActivity : ComponentActivity() {
         langButton = findViewById(R.id.langButton)
         backSegment = findViewById(R.id.backSegment)
         frontSegment = findViewById(R.id.frontSegment)
+        lightButton = findViewById(R.id.lightButton)
 
         portField.setText(port.toString())
         renderLens()
@@ -220,6 +227,58 @@ class MainActivity : ComponentActivity() {
 
         backSegment.setTextColor(if (lens == LENS_BACK) active else inactive)
         frontSegment.setTextColor(if (lens == LENS_FRONT) active else inactive)
+
+        renderLight()
+    }
+
+    /*
+     * 前置没有闪光灯，只能把这块屏幕拉到最亮当补光板。
+     */
+    private fun usesTorch(): Boolean =
+        lens == LENS_BACK && camera?.cameraInfo?.hasFlashUnit() == true
+
+    private fun renderLight() {
+        val torch = usesTorch()
+
+        lightButton.text = getString(
+            when {
+                lightOn && torch -> R.string.light_torch_on
+                lightOn -> R.string.light_screen_on
+                torch -> R.string.light_torch
+                else -> R.string.light_screen
+            }
+        )
+
+        lightButton.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (lightOn) R.color.accent else R.color.text_secondary
+            )
+        )
+    }
+
+    private fun applyLight() {
+        val torch = usesTorch()
+
+        runCatching { camera?.cameraControl?.enableTorch(lightOn && torch) }
+
+        window.attributes = window.attributes.apply {
+            screenBrightness = if (lightOn && !torch) {
+                1f
+            } else {
+                WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+            }
+        }
+    }
+
+    private fun setLight(on: Boolean) {
+        if (lightOn == on) return
+
+        lightOn = on
+
+        applyLight()
+        renderLight()
+        mjpegServer?.light = on
     }
 
     private fun wireControls() {
@@ -228,6 +287,8 @@ class MainActivity : ComponentActivity() {
 
         backSegment.setOnClickListener { selectLens(LENS_BACK) }
         frontSegment.setOnClickListener { selectLens(LENS_FRONT) }
+
+        lightButton.setOnClickListener { setLight(!lightOn) }
 
         onBackPressedDispatcher.addCallback(this) { showLeaveChoice() }
 
@@ -374,9 +435,14 @@ class MainActivity : ComponentActivity() {
 
         mjpegServer = MjpegServer(port).apply {
             lens = this@MainActivity.lens
+            light = this@MainActivity.lightOn
 
             onLens = { next ->
                 mainHandler.post { selectLens(next) }
+            }
+
+            onLight = { on ->
+                mainHandler.post { setLight(on) }
             }
 
             start()
@@ -560,7 +626,7 @@ class MainActivity : ComponentActivity() {
         analysis.setAnalyzer(cameraExecutor) { image -> processFrame(image) }
 
         try {
-            provider.bindToLifecycle(
+            camera = provider.bindToLifecycle(
                 this,
                 if (lens == LENS_FRONT) {
                     CameraSelector.DEFAULT_FRONT_CAMERA
@@ -571,8 +637,13 @@ class MainActivity : ComponentActivity() {
                 analysis
             )
 
+            /* 换镜头就是换了一台相机，补光得重新落到新的 CameraControl 上 */
+            applyLight()
+            renderLight()
+
             streaming = true
         } catch (e: Exception) {
+            camera = null
             streaming = false
             setStatus(R.string.status_error, R.color.danger)
             hint.text = e.message

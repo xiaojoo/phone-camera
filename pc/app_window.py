@@ -48,6 +48,7 @@ class BridgeWindow(QMainWindow):
         self._status_fields: dict = {}
         self._lens_now = "back"
         self._lens_task: BackgroundTask | None = None
+        self._light_now = False
 
         self._build_ui()
         self._apply_shortcuts()
@@ -125,10 +126,20 @@ class BridgeWindow(QMainWindow):
         self._lens.clicked.connect(self._switch_lens)
         self._set_lens(self._lens_now)
 
+        self._light = QPushButton()
+        self._light.setObjectName("IconToggle")
+        self._light.setCursor(Qt.PointingHandCursor)
+        self._light.setToolTip(i18n.tr("light.tip"))
+        self._light.setCheckable(True)
+        self._light.setEnabled(False)
+        self._light.clicked.connect(self._toggle_light)
+        self._set_light(self._light_now)
+
         header.addWidget(self._stage_title)
         header.addSpacing(10)
         header.addWidget(self._stage_subtitle)
         header.addStretch(1)
+        header.addWidget(self._light)
         header.addWidget(self._lens)
         header.addWidget(self._language)
         header.addWidget(self._snapshot)
@@ -265,10 +276,12 @@ class BridgeWindow(QMainWindow):
 
         if phase == Phase.LIVE:
             self._lens.setEnabled(True)
-            self._refresh_lens()
+            self._light.setEnabled(True)
+            self._refresh_phone()
 
         if phase in (Phase.FAILED, Phase.STOPPED):
             self._lens.setEnabled(False)
+            self._light.setEnabled(False)
             self._metrics.reset()
 
             if self._active is not None:
@@ -294,7 +307,9 @@ class BridgeWindow(QMainWindow):
         self._fullscreen.setToolTip(i18n.tr("view.fullscreenTip"))
         self._language.setText(i18n.tr("lang.toggle"))
         self._lens.setToolTip(i18n.tr("lens.tip"))
+        self._light.setToolTip(i18n.tr("light.tip"))
         self._set_lens(self._lens_now)
+        self._set_light(self._light_now)
 
         self._panel.retranslate()
         self._metrics.retranslate()
@@ -317,17 +332,18 @@ class BridgeWindow(QMainWindow):
     def _base_url(self) -> str:
         return self._active.url.rsplit("/", 1)[0]
 
-    def _refresh_lens(self) -> None:
+    def _refresh_phone(self) -> None:
         if self._active is None:
             return
 
         self._lens_task = BackgroundTask(self._phone_get, self._base_url() + "/status")
-        self._lens_task.finished_with.connect(self._on_lens_info)
+        self._lens_task.finished_with.connect(self._on_phone_state)
         self._lens_task.start()
 
-    def _on_lens_info(self, result) -> None:
+    def _on_phone_state(self, result) -> None:
         if isinstance(result, dict):
             self._set_lens(result.get("camera", ""))
+            self._set_light(result.get("light", False))
 
     def _switch_lens(self) -> None:
         if self._active is None:
@@ -351,6 +367,37 @@ class BridgeWindow(QMainWindow):
             return
 
         self._set_status("lens.failed", detail=str(result))
+
+    def _set_light(self, on: bool) -> None:
+        self._light_now = bool(on)
+
+        self._light.setChecked(self._light_now)
+        self._light.setText(i18n.tr("light.off" if self._light_now else "light.on"))
+
+    def _toggle_light(self) -> None:
+        if self._active is None:
+            self._set_status("light.needSession")
+            self._light.setChecked(self._light_now)
+            return
+
+        target = self._light.isChecked()
+
+        self._light.setEnabled(False)
+        self._lens_task = BackgroundTask(
+            self._phone_get, f"{self._base_url()}/torch?on={1 if target else 0}"
+        )
+        self._lens_task.finished_with.connect(self._on_light_switched)
+        self._lens_task.start()
+
+    def _on_light_switched(self, result) -> None:
+        self._light.setEnabled(self._active is not None)
+
+        if isinstance(result, dict):
+            self._set_light(result.get("light", False))
+            return
+
+        self._set_light(self._light_now)
+        self._set_status("light.failed", detail=str(result))
 
     # ---------------- view actions ----------------
 

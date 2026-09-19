@@ -29,7 +29,7 @@ USB 方式不需要手机侧改任何代码，只是把端口经 adb 转发到�
 | --- | --- |
 | `android/` | 手机 App（Kotlin，无第三方 UI 库） |
 | `android/app/src/main/java/com/camera/MainActivity.kt` | 取流、限帧、界面与语言切换 |
-| `android/app/src/main/java/com/camera/MjpegServer.kt` | 手写 HTTP 服务，`/video` `/status` `/` |
+| `android/app/src/main/java/com/camera/MjpegServer.kt` | 手写 HTTP 服务，`/video` `/status` `/camera` `/torch` `/` |
 | `android/app/src/main/java/com/camera/YuvToJpegConverter.kt` | YUV → JPEG |
 | `pc/` | 电脑端桥接程序（Python 3.10+ / PySide6） |
 | `pc/connection_panel.py` | 连接方式面板（Wi-Fi / USB 两段式表单） |
@@ -37,7 +37,7 @@ USB 方式不需要手机侧改任何代码，只是把端口经 adb 转发到�
 | `pc/camera_receiver.py` | OpenCV 拉流与超时控制 |
 | `pc/adb_bridge.py` | adb 定位、设备列表、端口转发 |
 | `pc/video_view.py` `pc/metrics_bar.py` `pc/theme.py` `pc/i18n.py` | 画面、指标、样式、文案 |
-| `pc/assets/app_icon.ico` | 窗口/任务栏图标（同一份几何也生成 Android 的 mipmap） |
+| `pc/assets/app_icon.ico` | 窗口/任务栏图标（16–256px 七档，同一张母图；Android 的 mipmap 同源） |
 
 `pc/.venv/` 是本机虚拟环境，不属于仓库内容，换机器按下面的步骤重建即可。
 
@@ -64,13 +64,14 @@ adb shell am start -n com.camera/.MainActivity
 
 - **状态胶囊**：`已停止 / 等待连接 / 推流中`，右侧是语言切换按钮
 - **取景预览**
-- **摄像头**：`后置 / 前置` 分段切换，选择会被记住
+- **摄像头**：`后置 / 前置` 分段切换，选择会被记住；右边是补光按钮，后置显示 `闪光灯`、前置显示 `屏幕补光`，开着时文字变绿并带 `·开`
 - **连接方式**：`Wi-Fi` 面板显示推流地址、在线客户端数、端口输入框；`USB 数据线` 面板显示线缆是否插入、以及电脑端要执行的 adb 命令
 - **启动服务 / 停止服务**
 
 行为：
 
 - 服务运行时给窗口加 `FLAG_KEEP_SCREEN_ON`，手机不会自动息屏；停止服务后恢复正常
+- 补光：后置用 LED 常亮（`CameraControl.enableTorch`），前置没有闪光灯，改成把这块屏幕拉到最亮当补光板；切镜头会跟着换到对应的实现，不跟随服务开关
 - 按 Home 切后台：直接进入小窗（PiP）继续推流，不断开连接；小窗里只有预览画面
 - 按返回键：弹出「切到后台？」，`退出` 会停服务并断开电脑连接，`小窗运行` 进入 PiP
 - Android 8.0 以下没有 PiP，此时切后台就是普通后台（相机随生命周期解绑）
@@ -80,9 +81,11 @@ HTTP 接口：
 | 路径 | 返回 |
 | --- | --- |
 | `/video` | `multipart/x-mixed-replace` 视频流 |
-| `/status` | JSON：`running` `ip` `port` `clients` `camera` `stream` |
+| `/status` | JSON：`running` `ip` `port` `clients` `camera` `light` `stream` |
 | `/camera` | JSON：当前镜头 |
 | `/camera?face=front` / `?face=back` | 切换镜头并返回新值 |
+| `/torch` | JSON：当前补光状态 |
+| `/torch?on=1` / `?on=0` | 开关补光并返回新值 |
 | `/` | 一个直接嵌 `/video` 的网页，方便用手机浏览器自测 |
 
 端口可在界面里改（1024–65535），改完会自动重启服务。
@@ -110,8 +113,8 @@ python -m venv .venv
 快捷键：`Ctrl+K` 连接/断开，`F11` 全屏（`Esc` 退出）。
 截图按钮写文件到当前目录的 `snapshots/camera_*.png`。
 
-画面区右上角的按钮：`切到前置 / 切到后置`（连上之后才可用，当前镜头从手机的
-`/status` 读取）、`English / 中文`、`截图`、`全屏`。
+画面区右上角的按钮：`开补光 / 关补光`、`切到前置 / 切到后置`（两个都连上之后才可用，
+镜头和补光状态从手机的 `/status` 读取）、`English / 中文`、`截图`、`全屏`。
 
 同一台电脑只能开一个桥接窗口：`adb forward` 的本机端口是全局的，两个实例会互相把
 对方的流打断，所以第二个启动时会提示已有人在运行然后退出。
@@ -182,6 +185,7 @@ adb -s <serial> forward --remove tcp:8080
 
 ## 已知限制
 
+- LED 常亮很费电也会发热，长时间用记得关；前置的「屏幕补光」只是把屏幕拉到最亮，亮度上限就是这块屏幕的上限，系统省电策略还可能压回去
 - 小窗（PiP）停靠的角落由系统决定，通常是右下，可拖动；API 没有"固定右上角"的接口
 - 小窗里仍在出帧，但系统会把进程降到低优先级，帧率明显低于前台（实测 Redmi K40 Gaming：前台约 10 FPS，小窗约 2~3 FPS）
 - `FLAG_KEEP_SCREEN_ON` 只在应用窗口可见时生效（前台或小窗）；要完全后台也不息屏得加前台服务

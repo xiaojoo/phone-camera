@@ -59,6 +59,14 @@ def parse_args():
 def main():
     args = parse_args()
 
+    if sys.platform == "win32":
+        # 不设这个，任务栏按钮会把 python.exe 当成宿主、画它自己的图标
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "PhoneCamera.Bridge"
+        )
+
     app = QApplication(sys.argv)
     app.setStyle(QStyleFactory.create("Fusion"))
     app.setOrganizationName("PhoneCamera")

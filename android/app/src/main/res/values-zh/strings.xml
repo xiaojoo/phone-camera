@@ -13,6 +13,10 @@
     <string name="section_camera">摄像头</string>
     <string name="camera_back">后置</string>
     <string name="camera_front">前置</string>
+    <string name="light_torch">闪光灯</string>
+    <string name="light_torch_on">闪光灯·开</string>
+    <string name="light_screen">屏幕补光</string>
+    <string name="light_screen_on">屏幕补光·开</string>
 
     <string name="section_connection">连接方式</string>
     <string name="mode_wifi">Wi-Fi</string>

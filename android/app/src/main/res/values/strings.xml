@@ -13,6 +13,10 @@
     <string name="section_camera">LENS</string>
     <string name="camera_back">Rear</string>
     <string name="camera_front">Front</string>
+    <string name="light_torch">Torch</string>
+    <string name="light_torch_on">Torch on</string>
+    <string name="light_screen">Screen light</string>
+    <string name="light_screen_on">Screen light on</string>
 
     <string name="section_connection">CONNECTION MODE</string>
     <string name="mode_wifi">Wi-Fi</string>
