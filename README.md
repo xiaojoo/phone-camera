@@ -174,19 +174,47 @@ ISCC packaging\PhoneCamera.iss                # 产出 pc/installer/PhoneCamera-
 可选桌面图标和卸载项。没装 Inno Setup 的话 `winget install JRSoftware.InnoSetup`。
 安装包本身没做代码签名，第一次运行 Windows 会弹一次「未知发布者」，点仍要运行即可。
 
-### 手机端：release APK
+### 手机端：release 签名
+
+签名证书不用向任何机构申请，用 JDK 自带的 `keytool` 自己生成一张自签名证书就行——它是这款
+App 的身份，Android 只校验「这次安装和上次是不是同一个 keystore 签的」。
 
 ```bash
-keytool -genkeypair -keystore release.keystore -alias phonecamera \
-        -keyalg RSA -keysize 2048 -validity 10000
-cd android && ./gradlew assembleRelease
+cd android && ./gradlew assembleRelease   # 产出 app/build/outputs/apk/release/app-release.apk
 ```
 
-`release.keystore` 和记密码的 `keystore.properties` 都不要进仓库（已在 `.gitignore` 里）。
-签名证书不用向任何机构申请，用 JDK 自带的 `keytool` 自己生成即可——它是这款 App 的身份，
-Android 只校验「这次安装和上次是不是同一个 keystore 签的」。所以**必须备份**：
-丢了以后就没法覆盖升级已装出去的机器，只能先卸载再装。debug 包用的是 SDK 目录里那个
-人人相同的 `~/.android/debug.keystore`，不能当发布签名用。
+keystore 已经生成好放在仓库外（`~/.android/phonecamera-release.keystore`，跟 debug.keystore
+同目录但完全独立），凭据写在 `android/keystore.properties`，两个文件都不进仓库。
+`app/build.gradle.kts` 读到 `keystore.properties` 就签 release，读不到就退回 debug 签名，
+所以 clone 出来的机器不带密钥也能构建。证书是 RSA 2048 / SHA384withRSA / 有效期 10000 天，
+`CN=PhoneCamera, O=sunxiaojie, C=CN`，SHA-256 开头 `80616cd5`。
+
+丢了这个 keystore 就没法覆盖升级已发出去的机器，只能先卸载再装，所以除了本机还要在别处留一份备份。
+换密码用 `keytool -storepasswd` / `keytool -keypasswd`，重新生成用 `keytool -genkeypair -keystore
+<路径> -alias phonecamera -keyalg RSA -keysize 2048 -validity 10000`。
+
+手机上当前的包是 debug 签的（debug 证书是 SDK 目录里那个人人相同的 `~/.android/debug.keystore`，
+不能当发布签名用），两者证书不同，release 包要覆盖安装得先卸载旧包。
+
+### 代码签名（Windows）
+
+安装包没有签名，用户第一次运行会看到 SmartScreen「未知发布者」，点「更多信息 → 仍要运行」即可。
+要真签下去，三条路的代价：
+
+- **Azure Artifact Signing（原 Trusted Signing）**：个人开发者最便宜的一条，但按 2026 年的文档，
+  Public Trust 证书只发给美国、加拿大、欧盟、英国、澳洲、新西兰、日本、韩国、新加坡、瑞士、
+  挪威、以色列的机构，个人开发者还限美加两地——国内拿不到。Private Trust 不受地域限制，
+  但只在你自己装了根证书的机器上有效，公开分发没用。
+- **传统 CA 的 OV/EV 证书**：大约 $150–400/年，且 CA/Browser Forum 从 2023 年起要求私钥存在
+  HSM 或云 HSM 里。签完也不会立刻消掉 SmartScreen——它现在按下载信誉判定，只有 EV 才有即时
+  信誉，而 EV 更贵、还要硬件 token。
+- **自签名证书**：只能骗过把这张根证书导入过「受信任的根证书颁发机构」的机器，发给别人没用。
+
+所以这里不签名，改成发布时把安装包的 SHA-256 写进 Release 说明，用户下载后自己对一下：
+
+```powershell
+certutil -hashfile PhoneCamera-0.1.0-setup.exe SHA256
+```
 
 ---
 
