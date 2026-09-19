@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -18,8 +19,10 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.LocaleList
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Rational
+import android.util.Range
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
@@ -30,6 +33,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -58,17 +64,19 @@ class MainActivity : ComponentActivity() {
         private const val JPEG_QUALITY = 80
 
         /*
-         * 第一版控制在 15 FPS 左右，
-         * 每一个 CameraX frame 都编码会让手机明显发热。
+         * 帧率运行时可调，这里只是默认值和边界。上限 30 是这台机器上
+         * CameraX 分析流能稳定拿到的最高档（要 AE 区间给到 [30,30]）。
          */
-        private const val TARGET_FPS = 15
-        private const val FRAME_INTERVAL_MS = 1000L / TARGET_FPS
+        private const val DEFAULT_FPS = 15
+        private const val MIN_FPS = 5
+        private const val MAX_FPS = 30
 
         private const val POLL_INTERVAL_MS = 1000L
 
         private const val PREFS_UI = "ui"
         private const val KEY_LANGUAGE = "lang"
         private const val KEY_CAMERA = "camera"
+        private const val KEY_FPS = "fps"
 
         private const val LENS_BACK = "back"
         private const val LENS_FRONT = "front"
@@ -122,6 +130,16 @@ class MainActivity : ComponentActivity() {
 
     private var lightOn = false
 
+    @Volatile
+    private var targetFps = DEFAULT_FPS
+
+    /*
+     * 阈值往下降 3ms：1000/30 整除成 33，而 30fps 的帧周期是 33.3ms，
+     * 卡在边界上的帧会被自己的节流判掉，实测因此少掉约四分之一。
+     */
+    private val frameIntervalMs: Long
+        get() = (1000L / targetFps - 3L).coerceAtLeast(1L)
+
     private var previewSideMargin = 0
 
     private var previewBottomMargin = 0
@@ -133,6 +151,9 @@ class MainActivity : ComponentActivity() {
     private var leaveDialog: AlertDialog? = null
 
     private val lastEncodeTime = AtomicLong(0L)
+
+    private var pushed = 0
+    private var windowStart = 0L
 
     private val statusPoller = object : Runnable {
         override fun run() {
@@ -172,6 +193,9 @@ class MainActivity : ComponentActivity() {
 
         lens = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
             .getString(KEY_CAMERA, LENS_BACK) ?: LENS_BACK
+
+        targetFps = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getInt(KEY_FPS, DEFAULT_FPS)
 
         setContentView(R.layout.activity_main)
 
@@ -309,6 +333,61 @@ class MainActivity : ComponentActivity() {
         applyLight()
         renderLight()
         mjpegServer?.light = on
+    }
+
+    private fun setFps(value: Int) {
+        val next = value.coerceIn(MIN_FPS, MAX_FPS)
+
+        if (next == targetFps) return
+
+        targetFps = next
+
+        getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_FPS, next)
+            .apply()
+
+        mjpegServer?.fpsTarget = next
+        applyFrameRate()
+    }
+
+    /*
+     * CameraX 的 ResolutionSelector 没有帧率入口，只能下沉到 Camera2 直接要
+     * CONTROL_AE_TARGET_FPS_RANGE。不给的话相机在 960x720 只跑 20 fps。
+     */
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun applyFrameRate() {
+        val control = camera?.let { Camera2CameraControl.from(it.cameraControl) } ?: return
+
+        val options = CaptureRequestOptions.Builder()
+            .setCaptureRequestOption(
+                CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                Range(targetFps, targetFps)
+            )
+            .build()
+
+        runCatching { control.setCaptureRequestOptions(options) }
+    }
+
+    /*
+     * 一秒一个窗口把实测帧率报给服务端：电脑端读 /status 就能核对
+     * 「设的帧率」和「真跑出来的帧率」是不是一个数。
+     */
+    private fun countPushed() {
+        val now = SystemClock.elapsedRealtime()
+
+        if (windowStart == 0L) windowStart = now
+
+        pushed += 1
+
+        val span = now - windowStart
+
+        if (span < 1000L) return
+
+        mjpegServer?.actualFps = pushed * 1000.0 / span
+
+        pushed = 0
+        windowStart = now
     }
 
     private fun wireControls() {
@@ -561,6 +640,7 @@ class MainActivity : ComponentActivity() {
         mjpegServer = MjpegServer(port).apply {
             lens = this@MainActivity.lens
             light = this@MainActivity.lightOn
+            fpsTarget = this@MainActivity.targetFps
 
             onLens = { next ->
                 mainHandler.post { selectLens(next) }
@@ -568,6 +648,10 @@ class MainActivity : ComponentActivity() {
 
             onLight = { on ->
                 mainHandler.post { setLight(on) }
+            }
+
+            onFps = { value ->
+                mainHandler.post { setFps(value) }
             }
 
             start()
@@ -766,6 +850,7 @@ class MainActivity : ComponentActivity() {
             /* 换镜头就是换了一台相机，补光得重新落到新的 CameraControl 上 */
             applyLight()
             renderLight()
+            applyFrameRate()
 
             streaming = true
         } catch (e: Exception) {
@@ -790,16 +875,20 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            val now = System.currentTimeMillis()
+            /*
+             * 必须用单调时钟：currentTimeMillis 是墙上时钟，毫秒粒度还会被 NTP 调。
+             */
+            val now = SystemClock.elapsedRealtime()
             val previous = lastEncodeTime.get()
 
-            if (now - previous < FRAME_INTERVAL_MS) return
+            if (now - previous < frameIntervalMs) return
             if (!lastEncodeTime.compareAndSet(previous, now)) return
 
             val jpeg = YuvToJpegConverter.convert(image, JPEG_QUALITY)
 
             if (jpeg != null && jpeg.isNotEmpty()) {
                 server.updateFrame(jpeg)
+                countPushed()
             }
 
         } catch (e: Exception) {

@@ -67,6 +67,18 @@ class MjpegServer(
 
     var onLight: ((Boolean) -> Unit)? = null
 
+    /*
+     * 目标帧率与实测帧率。切换由 Activity 负责（要改 AE 区间和编码节流），
+     * 这里只负责暴露出来，让电脑端能核对设置有没有真的生效。
+     */
+    @Volatile
+    var fpsTarget: Int = 0
+
+    @Volatile
+    var actualFps: Double = 0.0
+
+    var onFps: ((Int) -> Unit)? = null
+
     private val latestFrame =
         AtomicReference<ByteArray?>(null)
 
@@ -269,6 +281,12 @@ class MjpegServer(
                             path.startsWith("/torch?") -> {
 
                         sendTorch(socket, path)
+                    }
+
+                    path == "/fps" ||
+                            path.startsWith("/fps?") -> {
+
+                        sendFps(socket, path)
                     }
 
                     else -> {
@@ -513,6 +531,8 @@ class MjpegServer(
                 "clients": ${clients.get()},
                 "camera": "$lens",
                 "light": ${light},
+                "fps_target": $fpsTarget,
+                "fps": ${fpsText()},
                 "stream": "http://$ip:$port/video"
             }
         """.trimIndent()
@@ -596,6 +616,34 @@ class MjpegServer(
             body.toByteArray(Charsets.UTF_8)
         )
     }
+
+    private fun sendFps(
+        socket: Socket,
+        path: String
+    ) {
+
+        path.substringAfter("value=", "")
+            .toIntOrNull()
+            ?.let { onFps?.invoke(it) }
+
+        val body = """
+            {
+                "target": $fpsTarget,
+                "fps": ${fpsText()}
+            }
+        """.trimIndent()
+
+        sendResponse(
+            socket,
+            "200 OK",
+            "application/json; charset=utf-8",
+            body.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    /* Double.toString 不受 Locale 影响，format 会，所以这里手动留一位小数 */
+    private fun fpsText(): String =
+        (Math.round(actualFps * 10) / 10.0).toString()
 
     private fun send404(
         socket: Socket
