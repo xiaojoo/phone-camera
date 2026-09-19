@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -21,6 +22,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -103,6 +105,10 @@ class MainActivity : ComponentActivity() {
     private var camera: Camera? = null
 
     private var lightOn = false
+
+    private var previewSideMargin = 0
+
+    private var previewBottomMargin = 0
 
     private var streaming = false
 
@@ -193,6 +199,10 @@ class MainActivity : ComponentActivity() {
 
     private fun initViews() {
         previewView = findViewById(R.id.previewView)
+        (previewView.layoutParams as LinearLayout.LayoutParams).let {
+            previewSideMargin = it.marginStart
+            previewBottomMargin = it.bottomMargin
+        }
         topBar = findViewById(R.id.topBar)
         controls = findViewById(R.id.controls)
         statusText = findViewById(R.id.statusText)
@@ -392,20 +402,39 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        val loc = IntArray(2)
+        previewView.getLocationInWindow(loc)
+
         val params = PictureInPictureParams.Builder()
-            .setAspectRatio(Rational(9, 16))
+            .setAspectRatio(Rational(3, 4))
+            .setSourceRectHint(
+                Rect(loc[0], loc[1], loc[0] + previewView.width, loc[1] + previewView.height)
+            )
             .build()
 
         runCatching { enterPictureInPictureMode(params) }
     }
 
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
+    /*
+     * 小窗里只留画面：fitCenter 会把 3:4 的画面塞进竖窗，上下各空出一条黑边，
+     * 预览自己的 20dp 外边距再补一圈，所以进小窗换成裁剪填充并把边距清零。
+     */
+    private fun applyPipLayout(pip: Boolean) {
+        previewView.scaleType = if (pip) {
+            PreviewView.ScaleType.FILL_CENTER
+        } else {
+            PreviewView.ScaleType.FIT_CENTER
+        }
 
-        if (mjpegServer == null || inPictureInPicture) return
-        if (leaveDialog?.isShowing == true) return
-
-        enterPip()
+        (previewView.layoutParams as? LinearLayout.LayoutParams)?.let {
+            it.setMargins(
+                if (pip) 0 else previewSideMargin,
+                0,
+                if (pip) 0 else previewSideMargin,
+                if (pip) 0 else previewBottomMargin
+            )
+            previewView.layoutParams = it
+        }
     }
 
     override fun onPictureInPictureModeChanged(
@@ -420,6 +449,16 @@ class MainActivity : ComponentActivity() {
 
         topBar.visibility = visibility
         controls.visibility = visibility
+        applyPipLayout(isInPictureInPictureMode)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+
+        if (mjpegServer == null || inPictureInPicture) return
+        if (leaveDialog?.isShowing == true) return
+
+        enterPip()
     }
 
     // ---------------- server ----------------
