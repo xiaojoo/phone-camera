@@ -62,6 +62,19 @@ android {
     }
 }
 
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        // 产物名跟电脑端对齐：默认名带的是模块名 app
+        variant.outputs.forEach { output ->
+            output.outputFileName.set(
+                output.versionName.map {
+                    "PhoneCamera-$it-${variant.name}.apk"
+                }
+            )
+        }
+    }
+}
+
 dependencies {
 
     implementation(
