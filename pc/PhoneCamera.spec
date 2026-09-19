@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='CamLink',
+    name='PhoneCamera',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

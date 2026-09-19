@@ -149,6 +149,47 @@ adb -s <serial> forward --remove tcp:8080
 
 ---
 
+## 打包发布
+
+### 电脑端：单文件 exe
+
+```bash
+cd pc
+.venv/Scripts/python.exe -m pip install pyinstaller
+.venv/Scripts/pyinstaller PhoneCamera.spec    # 产出 pc/dist/PhoneCamera.exe，约 100 MB
+```
+
+`PhoneCamera.spec` 里记着全部参数（`console=False` 不带控制台、单文件、图标取
+`assets/app_icon.ico`），改排除项或要带额外文件就在它里面改。实测打包版连真机：
+Wi-Fi 12.0 FPS、USB 11.7 FPS，都是 960x720，USB 那条说明冻结进程自己调 adb
+建端口转发没问题。冷启动 2~4 秒（单文件每次要解压到临时目录）。
+
+### 电脑端：安装包
+
+```bash
+ISCC packaging\PhoneCamera.iss                # 产出 pc/installer/PhoneCamera-<版本>-setup.exe
+```
+
+装到当前用户的 `AppData\Local\Programs\PhoneCamera`，不需要管理员权限，带开始菜单项、
+可选桌面图标和卸载项。没装 Inno Setup 的话 `winget install JRSoftware.InnoSetup`。
+安装包本身没做代码签名，第一次运行 Windows 会弹一次「未知发布者」，点仍要运行即可。
+
+### 手机端：release APK
+
+```bash
+keytool -genkeypair -keystore release.keystore -alias phonecamera \
+        -keyalg RSA -keysize 2048 -validity 10000
+cd android && ./gradlew assembleRelease
+```
+
+`release.keystore` 和记密码的 `keystore.properties` 都不要进仓库（已在 `.gitignore` 里）。
+签名证书不用向任何机构申请，用 JDK 自带的 `keytool` 自己生成即可——它是这款 App 的身份，
+Android 只校验「这次安装和上次是不是同一个 keystore 签的」。所以**必须备份**：
+丢了以后就没法覆盖升级已装出去的机器，只能先卸载再装。debug 包用的是 SDK 目录里那个
+人人相同的 `~/.android/debug.keystore`，不能当发布签名用。
+
+---
+
 ## 实测表现
 
 在 Redmi K40 Gaming（`M2012K10C`，Android 13 / API 33，天玑 mt6893）上测得：

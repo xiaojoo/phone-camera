@@ -20,3 +20,9 @@ android/local.properties
 # 运行时输出
 pc/snapshots/
 *.log
+
+# 打包产物与签名密钥（密钥丢了就没法覆盖升级已发出去的机器，别提交也别只存在一台电脑上）
+pc/installer/
+*.keystore
+*.jks
+keystore.properties
