@@ -303,7 +303,7 @@ QToolTip {{
     background: {CARD};
     color: {TEXT};
     border: 1px solid {BORDER_STRONG};
-    padding: 5px 8px;
+    padding: 2px 4px;
 }}
 """
 
