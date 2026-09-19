@@ -5,6 +5,7 @@ __pycache__/
 
 # Android / Gradle 构建产物
 build/
+dist/
 .gradle/
 .kotlin/
 *.apk
