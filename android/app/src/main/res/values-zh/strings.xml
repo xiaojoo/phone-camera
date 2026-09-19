@@ -52,6 +52,10 @@
     <string name="bg_message">退出会断开与电脑的连接；用小窗运行则继续推流。</string>
     <string name="bg_exit">退出</string>
     <string name="bg_keep">小窗运行</string>
+    <string name="float_perm_title">允许显示在其他应用上层？</string>
+    <string name="float_perm_message">授权后小窗由本应用绘制：贴在右上角，圆角和画面对齐，不留系统那圈描边。不授权就改用系统小窗，位置和圆角由系统决定。</string>
+    <string name="float_perm_open">去授权</string>
+    <string name="float_perm_pip">用系统小窗</string>
 
     <plurals name="clients">
         <item quantity="other">%1$d 个客户端已连接</item>

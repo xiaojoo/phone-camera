@@ -11,12 +11,14 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.LocaleList
 import android.os.Looper
+import android.provider.Settings
 import android.util.Rational
 import android.view.View
 import android.view.WindowManager
@@ -38,6 +40,9 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -95,6 +100,17 @@ class MainActivity : ComponentActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var cameraProvider: ProcessCameraProvider? = null
+
+    private var preview: Preview? = null
+
+    private lateinit var floating: FloatingPreview
+
+    /*
+     * 相机绑在这个常驻 RESUMED 的生命周期上而不是 Activity 上：
+     * Activity 一 stop，绑在它上面的 CameraX 就解绑，悬浮窗会定住。
+     * 退到后台还能用相机，靠的是悬浮窗本身算「可见窗口」。
+     */
+    private val cameraOwner = AlwaysResumedOwner()
 
     private var mjpegServer: MjpegServer? = null
 
@@ -162,6 +178,8 @@ class MainActivity : ComponentActivity() {
         initViews()
         wireControls()
 
+        floating = FloatingPreview(this) { openFromFloat() }
+
         cameraExecutor = Executors.newSingleThreadExecutor()
 
         startServer()
@@ -183,6 +201,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         streaming = false
+
+        if (::floating.isInitialized) floating.hide()
 
         mainHandler.removeCallbacks(statusPoller)
 
@@ -392,7 +412,66 @@ class MainActivity : ComponentActivity() {
                 stopServer()
                 finishAndRemoveTask()
             }
-            .setPositiveButton(R.string.bg_keep) { _, _ -> enterPip() }
+            .setPositiveButton(R.string.bg_keep) { _, _ -> leaveToSmallWindow(prompt = true) }
+            .show()
+    }
+
+    /*
+     * 有悬浮窗权限就用自己的小窗（右上角、圆角自绘），没有就退回系统 PiP：
+     * PiP 是系统窗口，不需要授权，是唯一的降级路径。
+     *
+     * prompt=false 是按 Home 的路径：这时应用正要退到后台，弹授权框等于弹了个
+     * 看不见的框，所以直接走系统小窗，不打断。
+     */
+    private fun leaveToSmallWindow(prompt: Boolean) {
+        if (Settings.canDrawOverlays(this)) {
+            enterFloat()
+        } else if (prompt) {
+            askOverlayPermission()
+        } else {
+            enterPip()
+        }
+    }
+
+    private fun enterFloat() {
+        preview?.setSurfaceProvider(floating.previewView.surfaceProvider)
+
+        floating.show()
+        moveTaskToBack(true)
+    }
+
+    private fun exitFloat() {
+        if (!floating.isShowing) return
+
+        floating.hide()
+        preview?.setSurfaceProvider(previewView.surfaceProvider)
+    }
+
+    private fun openFromFloat() {
+        exitFloat()
+
+        startActivity(
+            Intent(this, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
+        )
+    }
+
+    private fun askOverlayPermission() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.float_perm_title)
+            .setMessage(R.string.float_perm_message)
+            .setNegativeButton(R.string.float_perm_pip) { _, _ -> enterPip() }
+            .setPositiveButton(R.string.float_perm_open) { _, _ ->
+                runCatching {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        )
+                    )
+                }
+            }
             .show()
     }
 
@@ -458,7 +537,14 @@ class MainActivity : ComponentActivity() {
         if (mjpegServer == null || inPictureInPicture) return
         if (leaveDialog?.isShowing == true) return
 
-        enterPip()
+        leaveToSmallWindow(prompt = false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        /* 从桌面图标或最近任务回来时，悬浮窗不会自己消失，这里收掉 */
+        exitFloat()
     }
 
     // ---------------- server ----------------
@@ -649,6 +735,7 @@ class MainActivity : ComponentActivity() {
 
         val preview = Preview.Builder().build()
         preview.setSurfaceProvider(previewView.surfaceProvider)
+        this.preview = preview
 
         val analysis = ImageAnalysis.Builder()
             .setResolutionSelector(
@@ -666,7 +753,7 @@ class MainActivity : ComponentActivity() {
 
         try {
             camera = provider.bindToLifecycle(
-                this,
+                cameraOwner,
                 if (lens == LENS_FRONT) {
                     CameraSelector.DEFAULT_FRONT_CAMERA
                 } else {
@@ -722,6 +809,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+}
+
+private class AlwaysResumedOwner : LifecycleOwner {
+
+    private val registry = LifecycleRegistry.createUnsafe(this)
+
+    override val lifecycle: Lifecycle get() = registry
+
+    init {
+        registry.currentState = Lifecycle.State.RESUMED
+    }
 }
 
 private fun Context.withLanguage(tag: String): Context {

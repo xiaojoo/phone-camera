@@ -5,6 +5,9 @@
     <!-- 摄像头 -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- 自绘悬浮小窗：用户去系统设置里手动授予 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <!-- Wi-Fi / 网络 -->
     <uses-permission android:name="android.permission.INTERNET" />
 

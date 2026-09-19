@@ -52,6 +52,10 @@
     <string name="bg_message">Quitting disconnects the PC. The small window keeps streaming.</string>
     <string name="bg_exit">Quit</string>
     <string name="bg_keep">Small window</string>
+    <string name="float_perm_title">Allow drawing over other apps?</string>
+    <string name="float_perm_message">Our own small window sits in the top-right corner and its rounded corners match the picture. Without this permission the app falls back to the system picture-in-picture, where the corner and offset are up to the system.</string>
+    <string name="float_perm_open">Open settings</string>
+    <string name="float_perm_pip">Use system window</string>
 
     <plurals name="clients">
         <item quantity="one">%d client connected</item>

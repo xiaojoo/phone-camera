@@ -72,9 +72,11 @@ adb shell am start -n com.camera/.MainActivity
 
 - 服务运行时给窗口加 `FLAG_KEEP_SCREEN_ON`，手机不会自动息屏；停止服务后恢复正常
 - 补光：后置用 LED 常亮（`CameraControl.enableTorch`），前置没有闪光灯，改成把这块屏幕拉到最亮当补光板；切镜头会跟着换到对应的实现，不跟随服务开关
-- 按 Home 切后台：直接进入小窗（PiP）继续推流，不断开连接；小窗里只有预览画面
-- 按返回键：弹出「切到后台？」，`退出` 会停服务并断开电脑连接，`小窗运行` 进入 PiP
-- Android 8.0 以下没有 PiP，此时切后台就是普通后台（相机随生命周期解绑）
+- 按 Home 切后台：进入自绘的悬浮小窗继续推流。贴在屏幕右上角，圆角由本应用裁（16dp，和画面对齐），可以拖动挪位置，点一下回到应用
+- 悬浮小窗要「显示在其他应用上层」权限；没授权就自动退回系统 PiP，角落和描边由系统决定
+- 按返回键：弹出「切到后台？」，`退出` 会停服务并断开电脑连接，`小窗运行` 进小窗（未授权时先弹一次授权引导）
+- 相机绑在一个常驻 RESUMED 的生命周期（`AlwaysResumedOwner`）上而不是 Activity 上，否则 Activity 一 stop CameraX 就解绑、小窗会定住；系统允许后台用相机的前提就是那个悬浮窗可见
+- Android 8.0 以下既没有悬浮窗也没有 PiP，切后台就是普通后台（相机会解绑）
 
 HTTP 接口：
 
@@ -160,7 +162,9 @@ cd pc
 ```
 
 `PhoneCamera.spec` 里记着全部参数（`console=False` 不带控制台、单文件、图标取
-`assets/app_icon.ico`），改排除项或要带额外文件就在它里面改。实测打包版连真机：
+`assets/app_icon.ico`），改排除项或要带额外文件就在它里面改。注意 `assets/app_icon.ico`
+必须同时作为 `datas` 打进包里：onefile 运行时 `main.py` 的 `__file__` 指向临时解压目录，
+漏了它 `setWindowIcon` 会静默失败，标题栏和任务栏就变成系统默认图标。实测打包版连真机：
 Wi-Fi 12.0 FPS、USB 11.7 FPS，都是 960x720，USB 那条说明冻结进程自己调 adb
 建端口转发没问题。冷启动 2~4 秒（单文件每次要解压到临时目录）。
 
@@ -180,8 +184,10 @@ ISCC packaging\PhoneCamera.iss                # 产出 pc/installer/PhoneCamera-
 App 的身份，Android 只校验「这次安装和上次是不是同一个 keystore 签的」。
 
 ```bash
-cd android && ./gradlew assembleRelease   # 产出 app/build/outputs/apk/release/app-release.apk
+cd android && ./gradlew assembleRelease   # 产出 app/build/outputs/apk/release/PhoneCamera-0.1.0-release.apk
 ```
+
+产物名由 `app/build.gradle.kts` 里的 `androidComponents` 改成和电脑端一致（默认名带的是模块名 `app`）。
 
 keystore 已经生成好放在仓库外（`~/.android/phonecamera-release.keystore`，跟 debug.keystore
 同目录但完全独立），凭据写在 `android/keystore.properties`，两个文件都不进仓库。
@@ -235,7 +241,9 @@ certutil -hashfile PhoneCamera-0.1.0-setup.exe SHA256
 去掉这两个参数的话，一次失败的连接会阻塞满 30 秒，界面随之假死。
 
 镜头切换、不息屏与小窗同样在这台机器上做过对照：系统息屏阈值 120 s，开着服务 145 s 后仍是 `Awake`，停止服务后同样时长进入 `Dozing`；
-按 Home 或按返回键选「小窗运行」后 `mLastReportedPictureInPictureMode=true`，`/video` 继续出帧；
+按 Home 后 `dumpsys window` 出现 `Sys2038:com.camera`（`TYPE_APPLICATION_OVERLAY`），`frame=[695,106][1058,590]`——1080 宽的屏上距右边缘 22px、距状态栏下沿 22px，即右上角，此时 `/video` 实测 11.2 FPS；
+拖一下能挪走（同一窗口 frame 变成 `[112,968][475,1452]`），点一下回应用、悬浮窗消失、预览重新接回 Activity 的 `PreviewView`；
+撤掉悬浮窗权限再按 Home 则落到系统 PiP（`mLastReportedPictureInPictureMode=true`），`/video` 同样继续出帧；
 选「退出」后端口立即关闭（连接被拒），`dumpsys media.camera` 的 `Active Camera Clients` 回到空列表，重新打开应用可立刻恢复推流。
 
 ---
@@ -255,10 +263,10 @@ certutil -hashfile PhoneCamera-0.1.0-setup.exe SHA256
 ## 已知限制
 
 - LED 常亮很费电也会发热，长时间用记得关；前置的「屏幕补光」只是把屏幕拉到最亮，亮度上限就是这块屏幕的上限，系统省电策略还可能压回去
-- 小窗（PiP）停靠的角落由系统决定，通常是右下，可拖动；API 没有"固定右上角"的接口
-- 小窗里仍在出帧，但系统会把进程降到低优先级，帧率明显低于前台（实测 Redmi K40 Gaming：前台约 10 FPS，小窗约 2~3 FPS）
+- 悬浮小窗默认右上角、可拖动，但不记位置：下次进小窗仍回右上角。没有「显示在其他应用上层」权限时退回系统 PiP，角落由系统定（实测 MIUI 落在右下，`frame=[672,1741][1039,2240]`，拖到右上后下次进入仍回右下）
+- 走系统 PiP 降级时进程会被降到低优先级，帧率明显低于前台（实测前台约 10 FPS，PiP 约 2~3 FPS）；自绘悬浮窗不吃这个降级，实测 11.2 FPS
 - `FLAG_KEEP_SCREEN_ON` 只在应用窗口可见时生效（前台或小窗）；要完全后台也不息屏得加前台服务
-- 没有 PiP、或窗口完全不可见时 CameraX 会解绑，画面就停了；此时服务仍会接受连接，但没有新帧，手机侧靠重发上一帧的保活写入识别走掉的观看者，最长 30 秒回收
+- 既没授权悬浮窗、又用不了 PiP（Android 8.0 以下）时，应用一进后台系统就禁用相机，画面会停；此时服务仍会接受连接，但没有新帧，手机侧靠重发上一帧的保活写入识别走掉的观看者，最长 30 秒回收
 - 没有鉴权：同一网络里的任何设备都能拉流，别在公共或访客网络上开着服务
 - 只解析 IPv4 地址；多网卡时手机界面取到的是第一个非回环 IPv4
 - 帧率上限受手机编码能力影响，降 `JPEG_QUALITY`（当前 80）或降分辨率可以换更高帧率
