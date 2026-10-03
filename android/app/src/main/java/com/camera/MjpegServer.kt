@@ -79,6 +79,16 @@ class MjpegServer(
 
     var onFps: ((Int) -> Unit)? = null
 
+    /*
+     * 对焦模式："auto" 对一次就停住 / "continuous" 一直找 / "locked" 冻结。
+     * 真正改 Camera2 请求的是 Activity，
+     * 这里只负责暴露当前模式，让电脑端能核对。
+     */
+    @Volatile
+    var focusMode: String = "auto"
+
+    var onFocus: ((String) -> Unit)? = null
+
     private val latestFrame =
         AtomicReference<ByteArray?>(null)
 
@@ -287,6 +297,12 @@ class MjpegServer(
                             path.startsWith("/fps?") -> {
 
                         sendFps(socket, path)
+                    }
+
+                    path == "/focus" ||
+                            path.startsWith("/focus?") -> {
+
+                        sendFocus(socket, path)
                     }
 
                     else -> {
@@ -533,6 +549,7 @@ class MjpegServer(
                 "light": ${light},
                 "fps_target": $fpsTarget,
                 "fps": ${fpsText()},
+                "focus": "$focusMode",
                 "stream": "http://$ip:$port/video"
             }
         """.trimIndent()
@@ -630,6 +647,43 @@ class MjpegServer(
             {
                 "target": $fpsTarget,
                 "fps": ${fpsText()}
+            }
+        """.trimIndent()
+
+        sendResponse(
+            socket,
+            "200 OK",
+            "application/json; charset=utf-8",
+            body.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    /*
+     * GET /focus                    -> 返回当前对焦模式
+     * GET /focus?mode=auto          -> 对一次就停住，再调一次重新对
+     * GET /focus?mode=continuous    -> 连续对焦（相机自己一直找）
+     * GET /focus?mode=locked        -> 冻结在当前镜头位置
+     *
+     * 未知 mode 不改状态，只把当前值返回去，
+     * 电脑端拿 mode 和请求值一比就知道有没有打错。
+     */
+    private fun sendFocus(
+        socket: Socket,
+        path: String
+    ) {
+
+        val requested = path.substringAfter("mode=", "")
+
+        if (requested.isNotEmpty() &&
+            requested in setOf("auto", "continuous", "locked")
+        ) {
+            focusMode = requested
+            onFocus?.invoke(requested)
+        }
+
+        val body = """
+            {
+                "mode": "$focusMode"
             }
         """.trimIndent()
 

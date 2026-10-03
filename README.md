@@ -75,7 +75,8 @@ adb shell am start -n com.camera/.MainActivity
 - 按 Home 切后台：进入自绘的悬浮小窗继续推流。贴在屏幕右上角，圆角由本应用裁（16dp，和画面对齐），可以拖动挪位置，点一下回到应用
 - 悬浮小窗要「显示在其他应用上层」权限；没授权就自动退回系统 PiP，角落和描边由系统决定
 - 按返回键：弹出「切到后台？」，`退出` 会停服务并断开电脑连接，`小窗运行` 进小窗（未授权时先弹一次授权引导）
-- 帧率默认 15，可以用 `/fps?value=N` 在 5~30 之间调，选择会存下来；界面暂时没有这个控件
+- 帧率默认 30，可以用 `/fps?value=N` 在 5~30 之间调，选择会存下来；界面暂时没有这个控件
+- 对焦默认 `auto`（对一次就停住），用 `/focus?mode=auto|continuous|locked` 切，同样存偏好；界面也没有控件。不设的话相机走的是 Camera2 默认的连续对焦，画面一动就重新拉风箱——电脑端实测只有 27% 的帧是清晰的，采集不能用
 - 相机绑在一个常驻 RESUMED 的生命周期（`AlwaysResumedOwner`）上而不是 Activity 上，否则 Activity 一 stop CameraX 就解绑、小窗会定住；系统允许后台用相机的前提就是那个悬浮窗可见
 - Android 8.0 以下既没有悬浮窗也没有 PiP，切后台就是普通后台（相机会解绑）
 
@@ -84,13 +85,16 @@ HTTP 接口：
 | 路径 | 返回 |
 | --- | --- |
 | `/video` | `multipart/x-mixed-replace` 视频流 |
-| `/status` | JSON：`running` `ip` `port` `clients` `camera` `light` `fps_target` `fps`（实测） `stream` |
+| `/status` | JSON：`running` `ip` `port` `clients` `camera` `light` `fps_target` `fps`（实测） `focus` `stream` |
 | `/camera` | JSON：当前镜头 |
 | `/camera?face=front` / `?face=back` | 切换镜头并返回新值 |
 | `/torch` | JSON：当前补光状态 |
 | `/torch?on=1` / `?on=0` | 开关补光并返回新值 |
 | `/fps` | JSON：`target` 与实测 `fps` |
 | `/fps?value=30` | 改帧率（5~30，存进偏好，重启仍生效）并返回当前值 |
+| `/focus` | JSON：当前对焦模式 |
+| `/focus?mode=auto` | 触发一次对焦后停住；再调一次会重新对焦 |
+| `/focus?mode=continuous` / `?mode=locked` | 连续对焦 / 冻结在当前镜头位置 |
 | `/` | 一个直接嵌 `/video` 的网页，方便用手机浏览器自测 |
 
 端口可在界面里改（1024–65535），改完会自动重启服务。
@@ -235,6 +239,8 @@ certutil -hashfile PhoneCamera-0.1.0-setup.exe SHA256
 | --- | --- |
 | 解码尺寸 | 960x720（CameraX 就近取到的档位） |
 | 帧率 | 目标 30 时前台 **27~28 FPS**，目标 15 时 13~14 FPS（改节流之前只有 10~11） |
+| PC 侧 Wi-Fi 到达率 | AE 钉死 `[30,30]` + 合并下发后 **24~25 FPS**（手机自报 22.8~25.5，和到达率同量级＝没在链路上丢帧）；AE/AF 分两次下发时退回 20.0 |
+| 对焦 | `continuous` 时清晰度 p50 41.9 / max 189.7（仍在偶尔重找），`auto` 与 `locked` 时 p50≈max（34.1~43.4，完全稳定） |
 | 单帧耗时 | 约 37 ms（目标 30、960x720） |
 | 首帧 | 打开流后约 31 ms |
 | 界面从点击到出画 | 4.0 s（含探测与缓冲） |
@@ -274,7 +280,9 @@ certutil -hashfile PhoneCamera-0.1.0-setup.exe SHA256
 - 只解析 IPv4 地址；多网卡时手机界面取到的是第一个非回环 IPv4
 - 帧率上限受手机编码能力影响：960x720 的软件 JPEG 编码一帧 26~38 ms，所以目标 30 实际到 27~28；降到 640x480 编码只剩 14~18 ms，能跑到 29。降 `JPEG_QUALITY`（当前 80）也能换帧率
 - 节流是「距上次编码超过阈值才编」，只能对相机帧率做整数分频：相机给 30 时能稳定落在 30 / 15 / 10 这几档，设 20 实测只有 16
-- AE 区间按目标帧率钉死成 `[N,N]`，暗光下曝光时间被压到 1/N 秒以内，画面会更暗更噪（实测 30 帧时 JPEG 从 30 KB 缩到 20.6 KB）；要画质优先就该改成 `[5,N]` 让 AE 自己降帧
+- AE 区间按目标帧率钉死成 `[N,N]`，暗光下曝光时间被压到 1/N 秒以内，画面会更暗更噪（实测 30 帧时 JPEG 从 30 KB 缩到 20.6 KB）；要画质优先就把下界改回 `MIN_FPS` 让 AE 自己降帧
+- **AE 区间和 AF 模式必须打包成一次 `setCaptureRequestOptions` 下发**。分两次调时后一次会覆盖前一次的整套选项：实测先下 AE `[30,30]`、再单独下 AF，AE 就悄悄退回 20 fps 工作点（`/status` 里 `fps_target` 仍是 30、`fps` 却是 20.0），只有合并成一次才拿到 24~29
+- 对焦靠画面对比找峰值，对着空墙/纯天花板这种低纹理目标时 `auto` 也会停在随机位置（实测同一场景两次 `auto` 拿到 43.0 和 34.1）。正确流程是先定好工作距离、让画面里有纹理，再 `/focus?mode=auto` 对一次、`/focus?mode=locked` 冻住
 - 电脑端 USB 方式依赖 adb；adb 不在 PATH 且没设 `ANDROID_HOME` 时，USB 面板会提示未找到
 
 ---

@@ -65,9 +65,9 @@ class MainActivity : ComponentActivity() {
 
         /*
          * 帧率运行时可调，这里只是默认值和边界。上限 30 是这台机器上
-         * CameraX 分析流能稳定拿到的最高档（要 AE 区间给到 [30,30]）。
+         * CameraX 分析流能稳定拿到的最高档。
          */
-        private const val DEFAULT_FPS = 15
+        private const val DEFAULT_FPS = 30
         private const val MIN_FPS = 5
         private const val MAX_FPS = 30
 
@@ -77,6 +77,18 @@ class MainActivity : ComponentActivity() {
         private const val KEY_LANGUAGE = "lang"
         private const val KEY_CAMERA = "camera"
         private const val KEY_FPS = "fps"
+        private const val KEY_FOCUS = "focus"
+
+        /*
+         * 对焦默认 auto：对一次就停住。
+         * 不设 AF 模式时相机走默认的连续对焦，画面一动就重新拉风箱，
+         * 电脑端实测只有 27% 的帧是清晰的，采集根本不能用。
+         */
+        private const val DEFAULT_FOCUS = "auto"
+        private val FOCUS_MODES = setOf("auto", "continuous", "locked")
+
+        /* AF_TRIGGER 是电平语义，START 之后要回 IDLE，留一点对焦时间 */
+        private const val AF_SETTLE_MS = 700L
 
         private const val LENS_BACK = "back"
         private const val LENS_FRONT = "front"
@@ -132,6 +144,9 @@ class MainActivity : ComponentActivity() {
 
     @Volatile
     private var targetFps = DEFAULT_FPS
+
+    @Volatile
+    private var focusMode = DEFAULT_FOCUS
 
     /*
      * 阈值往下降 3ms：1000/30 整除成 33，而 30fps 的帧周期是 33.3ms，
@@ -196,6 +211,10 @@ class MainActivity : ComponentActivity() {
 
         targetFps = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
             .getInt(KEY_FPS, DEFAULT_FPS)
+
+        focusMode = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getString(KEY_FOCUS, DEFAULT_FOCUS)
+            ?.takeIf { it in FOCUS_MODES } ?: DEFAULT_FOCUS
 
         setContentView(R.layout.activity_main)
 
@@ -354,19 +373,89 @@ class MainActivity : ComponentActivity() {
     /*
      * CameraX 的 ResolutionSelector 没有帧率入口，只能下沉到 Camera2 直接要
      * CONTROL_AE_TARGET_FPS_RANGE。不给的话相机在 960x720 只跑 20 fps。
+     *
+     * 这里钉死 [N,N]，帧率优先。这台 K40 实测是个二选一：下界不等于 N 时
+     * HAL 直接选 20 fps 的工作点（[5,30] 和 [25,30] 都是 19.9 fps，
+     * 开 LED 也救不回来），只有 [30,30] 才给 30 fps 到达率。
+     *
+     * 代价是 AE 不能靠拉长曝光换画质，暗光下更暗更噪
+     * （实测 JPEG 从 30 KB 缩到 20.6 KB）。要画质优先就把下界改回 MIN_FPS。
+     */
+    private fun applyFrameRate() = applyCameraOptions()
+
+    /*
+     * CameraX 没有对焦模式入口，同样下沉 Camera2。
+     * 不设的话相机走默认连续对焦，画面一动就重新拉风箱。
+     *
+     * auto       触发一次后停住，再调一次 /focus?mode=auto 会重新对
+     * continuous 相机自己一直找
+     * locked     AF_MODE_OFF，镜头位置冻在原地
+     *
+     * AF_TRIGGER 是电平语义：START 之后必须回 IDLE，
+     * 否则每一帧都在重新触发，auto 就退化成 continuous 了。
+     */
+    private fun applyFocus() {
+        if (focusMode != "auto") {
+            applyCameraOptions()
+
+            return
+        }
+
+        if (!applyCameraOptions(CaptureRequest.CONTROL_AF_TRIGGER_START)) return
+
+        mainHandler.postDelayed(
+            { applyCameraOptions(CaptureRequest.CONTROL_AF_TRIGGER_IDLE) },
+            AF_SETTLE_MS
+        )
+    }
+
+    /*
+     * AE 区间和 AF 模式必须打包成一次请求下发。
+     * 分成两次 setCaptureRequestOptions 时，后一次会覆盖前一次的整套选项：
+     * 实测先下发 AE、再单独下发 AF，AE 就退回 [5,30] 的 20 fps 工作点。
      */
     @OptIn(ExperimentalCamera2Interop::class)
-    private fun applyFrameRate() {
-        val control = camera?.let { Camera2CameraControl.from(it.cameraControl) } ?: return
+    private fun applyCameraOptions(
+        afTrigger: Int = CaptureRequest.CONTROL_AF_TRIGGER_IDLE
+    ): Boolean {
+        val afMode = when (focusMode) {
+            "auto" -> CaptureRequest.CONTROL_AF_MODE_AUTO
+            "locked" -> CaptureRequest.CONTROL_AF_MODE_OFF
+            else -> CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+        }
+
+        val control = camera?.let { Camera2CameraControl.from(it.cameraControl) }
+            ?: return false
 
         val options = CaptureRequestOptions.Builder()
             .setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
                 Range(targetFps, targetFps)
             )
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, afMode)
+            .setCaptureRequestOption(CaptureRequest.CONTROL_AF_TRIGGER, afTrigger)
             .build()
 
-        runCatching { control.setCaptureRequestOptions(options) }
+        return runCatching { control.setCaptureRequestOptions(options) }.isSuccess
+    }
+
+    /*
+     * 同一个 mode 也要重新执行：/focus?mode=auto 的语义是"重新对一次"，
+     * 所以这里不能像 setFps 那样提前返回。
+     */
+    private fun setFocus(mode: String) {
+        if (mode !in FOCUS_MODES) return
+
+        focusMode = mode
+
+        getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_FOCUS, mode)
+            .apply()
+
+        mjpegServer?.focusMode = mode
+
+        applyFocus()
     }
 
     /*
@@ -641,6 +730,7 @@ class MainActivity : ComponentActivity() {
             lens = this@MainActivity.lens
             light = this@MainActivity.lightOn
             fpsTarget = this@MainActivity.targetFps
+            focusMode = this@MainActivity.focusMode
 
             onLens = { next ->
                 mainHandler.post { selectLens(next) }
@@ -652,6 +742,10 @@ class MainActivity : ComponentActivity() {
 
             onFps = { value ->
                 mainHandler.post { setFps(value) }
+            }
+
+            onFocus = { mode ->
+                mainHandler.post { setFocus(mode) }
             }
 
             start()
@@ -851,6 +945,7 @@ class MainActivity : ComponentActivity() {
             applyLight()
             renderLight()
             applyFrameRate()
+            applyFocus()
 
             streaming = true
         } catch (e: Exception) {
