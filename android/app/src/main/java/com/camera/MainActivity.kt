@@ -99,11 +99,11 @@ class MainActivity : ComponentActivity() {
         private const val AF_SETTLE_MS = 700L
 
         /*
-         * 输出画面方向，顺时针角度。默认 0 度＝维持加这个功能之前的字节顺序，
-         * 升级不会把已经在用的画面悄悄转走。
+         * 输出画面方向，顺时针角度，叠在缓冲区自己的方向之上。
+         * 0° ＝ 和手机预览同向（人眼看过去是正的），90/180/270 从那里再转。
          *
-         * 这个值只由界面/接口决定，跟手机怎么拿无关：Activity 锁了 portrait，
-         * 分析缓冲区又永远是传感器方向，转手机两边都不动。
+         * 它只由界面/接口决定：跟手机怎么拿、以及相机这次给的是横缓冲区还是
+         * 竖缓冲区都无关，后者由 ImageInfo.rotationDegrees 抵掉，见 processFrame。
          */
         private const val DEFAULT_ROTATION = 0
         private val ROTATIONS = listOf(0, 90, 180, 270)
@@ -1234,9 +1234,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /*
+     * 相机给的缓冲区尺寸和它报的旋转角，只在变了的时候回写。
+     *
+     * 要量这个是因为推出去的方向 = 缓冲区自己的方向 + 界面设的角度，
+     * 而前者会变：同一颗后置实测昨天给 960x720、今天给 720x960。
+     */
+    private var lastSourceKey = ""
+
+    private fun reportSource(image: ImageProxy) {
+        val size = image.width.toString() + "x" + image.height
+        val key = size + "@" + image.imageInfo.rotationDegrees
+
+        if (key == lastSourceKey) return
+
+        lastSourceKey = key
+
+        mjpegServer?.let {
+            it.sourceSize = size
+            it.sourceRotation = image.imageInfo.rotationDegrees
+        }
+    }
+
     private fun processFrame(image: ImageProxy) {
         try {
             if (!streaming) return
+
+            reportSource(image)
 
             val server = mjpegServer
 
@@ -1257,10 +1281,18 @@ class MainActivity : ComponentActivity() {
             if (now - previous < frameIntervalMs) return
             if (!lastEncodeTime.compareAndSet(previous, now)) return
 
+            /*
+             * 缓冲区自己的方向也要算进来：ImageInfo.rotationDegrees 是
+             * CameraX 给的「这一帧要顺时针转多少才正」，叠加界面上设的角度，
+             * 推出去的方向就只取决于界面设的那个数。
+             *
+             * 不叠的话，同一颗镜头在不同次绑定里可能给 960x720 也可能给
+             * 720x960（实测遇到过一次），界面上设的 90° 就会转成别的东西。
+             */
             val jpeg = YuvToJpegConverter.convert(
                 image,
                 JPEG_QUALITY,
-                rotationDegrees
+                (image.imageInfo.rotationDegrees + rotationDegrees) % 360
             )
 
             if (jpeg != null && jpeg.isNotEmpty()) {

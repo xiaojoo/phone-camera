@@ -115,6 +115,17 @@ class MjpegServer(
 
     var onZoom: ((Float) -> Unit)? = null
 
+    /*
+     * 相机给分析流的缓冲区尺寸（"960x720" 这种）和 ImageInfo 报的旋转角。
+     * 诊断用：推出去的方向是「缓冲区自己的方向 + 界面设的角度」，
+     * 缓冲区方向会变，光看输出尺寸分不清是谁转的。
+     */
+    @Volatile
+    var sourceSize: String = ""
+
+    @Volatile
+    var sourceRotation: Int = -1
+
     private val latestFrame =
         AtomicReference<ByteArray?>(null)
 
@@ -589,6 +600,8 @@ class MjpegServer(
                 "fps": ${fpsText()},
                 "focus": "$focusMode",
                 "rotation": $rotation,
+                "source": "$sourceSize",
+                "source_rotation": $sourceRotation,
                 "zoom": ${zoomText()},
                 "stream": "http://$ip:$port/video"
             }
