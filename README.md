@@ -6,6 +6,11 @@
 
 项目还在早期阶段：没有音频、没有鉴权、没有多机位。
 
+不想自己构建的话，现成的包在 **[Releases](https://github.com/xiaojoo/phone-camera/releases/latest)**：
+电脑端下 `PhoneCamera-<版本>-setup.exe`（当前 0.1.1，装到当前用户，不需要管理员权限），
+手机端下 `PhoneCamera-<版本>-release.apk`（Android 7.0+）。两个都没做代码签名，
+Release 说明里带各自的 SHA-256，下载后对一下再用。
+
 ---
 
 ## 工作原理
