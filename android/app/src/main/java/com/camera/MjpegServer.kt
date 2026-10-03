@@ -89,6 +89,32 @@ class MjpegServer(
 
     var onFocus: ((String) -> Unit)? = null
 
+    /*
+     * 输出画面方向：0/90/180/270，顺时针。
+     * 真正重排像素的是采集线程（旋转折进 NV21 的收集里），
+     * 这里只暴露当前值，让电脑端能核对。
+     */
+    @Volatile
+    var rotation: Int = 0
+
+    var onRotation: ((Int) -> Unit)? = null
+
+    /*
+     * 当前倍率，以及这颗镜头能给的上下限。
+     * 三个数都是 Activity 按相机 characteristics 钳好之后推过来的，
+     * 界面、/status、偏好里是同一个数。
+     */
+    @Volatile
+    var zoomRatio: Float = 1f
+
+    @Volatile
+    var zoomMin: Float = 1f
+
+    @Volatile
+    var zoomMax: Float = 1f
+
+    var onZoom: ((Float) -> Unit)? = null
+
     private val latestFrame =
         AtomicReference<ByteArray?>(null)
 
@@ -303,6 +329,18 @@ class MjpegServer(
                             path.startsWith("/focus?") -> {
 
                         sendFocus(socket, path)
+                    }
+
+                    path == "/rotate" ||
+                            path.startsWith("/rotate?") -> {
+
+                        sendRotation(socket, path)
+                    }
+
+                    path == "/zoom" ||
+                            path.startsWith("/zoom?") -> {
+
+                        sendZoom(socket, path)
                     }
 
                     else -> {
@@ -550,6 +588,8 @@ class MjpegServer(
                 "fps_target": $fpsTarget,
                 "fps": ${fpsText()},
                 "focus": "$focusMode",
+                "rotation": $rotation,
+                "zoom": ${zoomText()},
                 "stream": "http://$ip:$port/video"
             }
         """.trimIndent()
@@ -695,9 +735,84 @@ class MjpegServer(
         )
     }
 
+    /*
+     * GET /rotate              -> 返回当前输出方向
+     * GET /rotate?value=90     -> 输出画面顺时针转 90 度
+     *
+     * 只认 0/90/180/270。别的值不改状态、原样把当前值返回去，
+     * 和 /focus 对未知 mode 的处理一致。
+     */
+    private fun sendRotation(
+        socket: Socket,
+        path: String
+    ) {
+
+        path.substringAfter("value=", "")
+            .toIntOrNull()
+            ?.takeIf { it % 90 == 0 && it in 0..270 }
+            ?.let {
+                rotation = it
+                onRotation?.invoke(it)
+            }
+
+        val body = """
+            {
+                "degree": $rotation
+            }
+        """.trimIndent()
+
+        sendResponse(
+            socket,
+            "200 OK",
+            "application/json; charset=utf-8",
+            body.toByteArray(Charsets.UTF_8)
+        )
+    }
+
+    /*
+     * GET /zoom                -> 返回当前倍率与这颗镜头的上下限
+     * GET /zoom?value=2.0      -> 变到 2 倍，超出区间先在这里按上下限夹住
+     *
+     * 上下限是 Activity 从相机 characteristics 读到之后推过来的（实测后置 10 倍、
+     * 前置 4 倍），所以这里夹完的值和界面显示的是同一个数。
+     */
+    private fun sendZoom(
+        socket: Socket,
+        path: String
+    ) {
+
+        val requested =
+            path.substringAfter("value=", "")
+                .toFloatOrNull()
+
+        if (requested != null && requested.isFinite()) {
+            zoomRatio = requested.coerceIn(zoomMin, zoomMax)
+            onZoom?.invoke(zoomRatio)
+        }
+
+        val body = """
+            {
+                "zoom": ${zoomText()},
+                "zoom_min": $zoomMin,
+                "zoom_max": $zoomMax
+            }
+        """.trimIndent()
+
+        sendResponse(
+            socket,
+            "200 OK",
+            "application/json; charset=utf-8",
+            body.toByteArray(Charsets.UTF_8)
+        )
+    }
+
     /* Double.toString 不受 Locale 影响，format 会，所以这里手动留一位小数 */
     private fun fpsText(): String =
         (Math.round(actualFps * 10) / 10.0).toString()
+
+    /* 倍率留两位：相机回读的是 Float，1.9999999 这种直接喷出来没法看 */
+    private fun zoomText(): String =
+        (Math.round(zoomRatio * 100) / 100.0).toString()
 
     private fun send404(
         socket: Socket

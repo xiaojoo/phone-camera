@@ -18,6 +18,12 @@
     <string name="light_screen">Screen light</string>
     <string name="light_screen_on">Screen light on</string>
 
+    <!-- 角度两种语言写法一样，只留默认这一份 -->
+    <string name="rotation_0" translatable="false">0°</string>
+    <string name="rotation_90" translatable="false">90°</string>
+    <string name="rotation_180" translatable="false">180°</string>
+    <string name="rotation_270" translatable="false">270°</string>
+
     <string name="section_connection">CONNECTION MODE</string>
     <string name="mode_wifi">Wi-Fi</string>
     <string name="mode_usb">USB cable</string>

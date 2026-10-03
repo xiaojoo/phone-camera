@@ -93,10 +93,10 @@
     </LinearLayout>
 
 
-    <!-- 取景预览 -->
+    <!-- 取景预览：外面套一层，方向和变焦的控件浮在画面自己身上 -->
 
-    <androidx.camera.view.PreviewView
-        android:id="@+id/previewView"
+    <FrameLayout
+        android:id="@+id/previewBox"
 
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -104,12 +104,68 @@
 
         android:layout_marginStart="20dp"
         android:layout_marginEnd="20dp"
-        android:layout_marginBottom="14dp"
+        android:layout_marginBottom="14dp">
 
-        android:background="@color/black"
+        <androidx.camera.view.PreviewView
+            android:id="@+id/previewView"
 
-        app:implementationMode="performance"
-        app:scaleType="fitCenter" />
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+
+            android:background="@color/black"
+
+            app:implementationMode="performance"
+            app:scaleType="fitCenter" />
+
+        <FrameLayout
+            android:id="@+id/previewOverlay"
+
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <!-- 右上角：画面方向下拉框 -->
+
+            <TextView
+                android:id="@+id/rotateButton"
+
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+
+                android:layout_gravity="top|end"
+
+                android:layout_marginTop="10dp"
+                android:layout_marginEnd="10dp"
+
+                android:background="@drawable/bg_overlay_pill"
+
+                android:clickable="true"
+                android:focusable="true"
+
+                android:gravity="center"
+
+                android:paddingStart="13dp"
+                android:paddingEnd="13dp"
+
+                android:text="@string/rotation_0"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <!-- 底部居中：半圆弧变焦拨盘 -->
+
+            <com.camera.ZoomDialView
+                android:id="@+id/zoomDial"
+
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+
+                android:layout_gravity="bottom|center_horizontal"
+
+                android:layout_marginBottom="8dp" />
+
+        </FrameLayout>
+
+    </FrameLayout>
 
 
     <!-- 连接方式 -->

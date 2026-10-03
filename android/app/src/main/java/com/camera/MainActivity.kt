@@ -11,6 +11,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.os.BatteryManager
@@ -24,16 +25,20 @@ import android.provider.Settings
 import android.util.Rational
 import android.util.Range
 import android.view.View
+import android.view.LayoutInflater
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
@@ -78,6 +83,9 @@ class MainActivity : ComponentActivity() {
         private const val KEY_CAMERA = "camera"
         private const val KEY_FPS = "fps"
         private const val KEY_FOCUS = "focus"
+        private const val KEY_ROTATION = "rotation"
+        private const val KEY_ZOOM = "zoom"
+
 
         /*
          * 对焦默认 auto：对一次就停住。
@@ -90,11 +98,32 @@ class MainActivity : ComponentActivity() {
         /* AF_TRIGGER 是电平语义，START 之后要回 IDLE，留一点对焦时间 */
         private const val AF_SETTLE_MS = 700L
 
+        /*
+         * 输出画面方向，顺时针角度。默认 0 度＝维持加这个功能之前的字节顺序，
+         * 升级不会把已经在用的画面悄悄转走。
+         *
+         * 这个值只由界面/接口决定，跟手机怎么拿无关：Activity 锁了 portrait，
+         * 分析缓冲区又永远是传感器方向，转手机两边都不动。
+         */
+        private const val DEFAULT_ROTATION = 0
+        private val ROTATIONS = listOf(0, 90, 180, 270)
+
+        /* 变焦默认 1 倍＝不裁。存的是倍率而不是滑块位置，换镜头才有意义 */
+        private const val DEFAULT_ZOOM = 1f
+
         private const val LENS_BACK = "back"
         private const val LENS_FRONT = "front"
     }
 
     private lateinit var previewView: PreviewView
+
+    private lateinit var previewBox: View
+    private lateinit var previewOverlay: View
+    private lateinit var rotateButton: TextView
+    private lateinit var zoomDial: ZoomDialView
+
+    private var rotationPopup: PopupWindow? = null
+
     private lateinit var topBar: View
     private lateinit var controls: View
     private lateinit var statusText: TextView
@@ -147,6 +176,27 @@ class MainActivity : ComponentActivity() {
 
     @Volatile
     private var focusMode = DEFAULT_FOCUS
+
+    /* 采集线程每帧要读一次这个值来决定像素往哪写，所以 @Volatile */
+    @Volatile
+    private var rotationDegrees = DEFAULT_ROTATION
+
+    /*
+     * 当前倍率，只在主线程读写。已经按这颗镜头的真实区间钳制过，
+     * 所以界面显示、/status 回读、偏好里存的是同一个数。
+     */
+    private var zoomRatio = DEFAULT_ZOOM
+
+    /*
+     * 这颗镜头能给的倍率区间。
+     *
+     * 不用 zoomState 的 min/max：实测换到前置之后它只回调一次，
+     * 报的是 min=max=1.0 而同一颗镜头的 characteristics 写的是 [1,4]
+     * （dumpsys media.camera → android.control.zoomRatioRange）。
+     * 拿那个假区间去钳制，前置的变焦就被锁死在 1 倍。
+     */
+    private var zoomMin = 1f
+    private var zoomMax = 1f
 
     /*
      * 阈值往下降 3ms：1000/30 整除成 33，而 30fps 的帧周期是 33.3ms，
@@ -216,6 +266,13 @@ class MainActivity : ComponentActivity() {
             .getString(KEY_FOCUS, DEFAULT_FOCUS)
             ?.takeIf { it in FOCUS_MODES } ?: DEFAULT_FOCUS
 
+        rotationDegrees = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getInt(KEY_ROTATION, DEFAULT_ROTATION)
+            ?.takeIf { it in ROTATIONS } ?: DEFAULT_ROTATION
+
+        zoomRatio = getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .getFloat(KEY_ZOOM, DEFAULT_ZOOM)
+
         setContentView(R.layout.activity_main)
 
         initViews()
@@ -250,6 +307,7 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacks(statusPoller)
 
         runCatching { leaveDialog?.dismiss() }
+        runCatching { rotationPopup?.dismiss() }
         runCatching { unregisterReceiver(powerReceiver) }
         runCatching { cameraProvider?.unbindAll() }
         runCatching { mjpegServer?.stop() }
@@ -262,7 +320,13 @@ class MainActivity : ComponentActivity() {
 
     private fun initViews() {
         previewView = findViewById(R.id.previewView)
-        (previewView.layoutParams as LinearLayout.LayoutParams).let {
+        previewBox = findViewById(R.id.previewBox)
+        previewOverlay = findViewById(R.id.previewOverlay)
+        rotateButton = findViewById(R.id.rotateButton)
+        zoomDial = findViewById(R.id.zoomDial)
+
+        /* 边距现在挂在 previewBox 上：小窗要清零，得动这一层 */
+        (previewBox.layoutParams as LinearLayout.LayoutParams).let {
             previewSideMargin = it.marginStart
             previewBottomMargin = it.bottomMargin
         }
@@ -288,6 +352,7 @@ class MainActivity : ComponentActivity() {
 
         portField.setText(port.toString())
         renderLens()
+        renderRotation()
     }
 
     private fun renderLens() {
@@ -302,6 +367,90 @@ class MainActivity : ComponentActivity() {
         frontSegment.setTextColor(if (lens == LENS_FRONT) active else inactive)
 
         renderLight()
+    }
+
+    /*
+     * 方向写在画面右上角那颗胶囊上。带一个下箭头是必要的：
+     * 光写「0°」看着像读数，不像能点的东西。
+     */
+    private fun renderRotation() {
+        rotateButton.text = rotationLabel(rotationDegrees)
+    }
+
+    private fun rotationLabel(degrees: Int): String =
+        getString(
+            when (degrees) {
+                90 -> R.string.rotation_90
+                180 -> R.string.rotation_180
+                270 -> R.string.rotation_270
+                else -> R.string.rotation_0
+            }
+        ) + " ▾"
+
+    /*
+     * 下拉框每次打开都重新装一遍：当前角度只有一份（rotationDegrees），
+     * 弹层里高亮哪一行由它决定，省掉「弹层选中态」和「外面当前值」两份数同步。
+     */
+    private fun showRotationPopup() {
+        if (rotationPopup?.isShowing == true) return
+
+        val rowIds = listOf(R.id.rotRow0, R.id.rotRow90, R.id.rotRow180, R.id.rotRow270)
+
+        val content = LayoutInflater.from(this)
+            .inflate(R.layout.popup_rotation, null)
+
+        val minWidth = (92 * resources.displayMetrics.density).toInt()
+
+        val popup = PopupWindow(
+            content,
+            maxOf(rotateButton.width, minWidth),
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            true
+        )
+
+        /* PopupWindow 的 setter 叫 setBackgroundDrawable，没有对应的属性语法 */
+        popup.setBackgroundDrawable(ContextCompat.getDrawable(this, R.drawable.bg_card))
+        popup.elevation = 12f * resources.displayMetrics.density
+
+        rowIds.forEachIndexed { index, id ->
+            val row = content.findViewById<TextView>(id)
+            val degrees = ROTATIONS[index]
+
+            row.setTextColor(
+                ContextCompat.getColor(
+                    this,
+                    if (degrees == rotationDegrees) R.color.accent else R.color.text_secondary
+                )
+            )
+
+            row.setOnClickListener {
+                popup.dismiss()
+                setRotationDegrees(degrees)
+            }
+        }
+
+        /* 右边缘和胶囊对齐：弹层比胶囊宽，所以往左挪 */
+        popup.showAsDropDown(
+            rotateButton,
+            rotateButton.width - popup.width,
+            (4 * resources.displayMetrics.density).toInt()
+        )
+
+        rotationPopup = popup
+    }
+
+    /*
+     * 倍率写到画面上的拨盘里。
+     * 手指正按着拨盘的时候不回写，否则会把正在拖的位置抢走。
+     */
+    private fun renderZoom() {
+        zoomDial.setRange(zoomMin, zoomMax)
+
+        if (!zoomDial.isDragging) {
+            val span = zoomMax - zoomMin
+
+            zoomDial.syncProgress(if (span <= 0f) 0f else (zoomRatio - zoomMin) / span)
+        }
     }
 
     /*
@@ -458,6 +607,95 @@ class MainActivity : ComponentActivity() {
         applyFocus()
     }
 
+    private fun setRotationDegrees(degrees: Int) {
+        if (degrees !in ROTATIONS) return
+        if (degrees == rotationDegrees) return
+
+        rotationDegrees = degrees
+
+        getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+            .edit()
+            .putInt(KEY_ROTATION, degrees)
+            .apply()
+
+        mjpegServer?.rotation = degrees
+
+        /*
+         * 下一帧的像素就按新角度排，不用重新绑定，也不用清缓冲：
+         * 观看者拿到的是完整的一帧，尺寸从 960x720 变成 720x960 而已。
+         */
+        renderRotation()
+    }
+
+    /*
+     * 变焦走 CameraX 的 CameraControl.setZoomRatio：它是逐帧的请求参数，
+     * 既不重建会话，也不和 AE/AF 那一套 setCaptureRequestOptions 抢下发
+     * （那两个必须打包成一次，见 applyCameraOptions）。
+     *
+     * 不用 setLinearZoom：实测这颗相机 linearZoom 的下半程全落在 1 倍上
+     * （滑块到 52% 才 1.17 倍），因为 CameraX 把 0.5 定义成 1 倍的分界，
+     * 而这台机器最小就是 1 倍。这里让滑块直接线性对应真实倍率区间。
+     */
+    private fun setZoom(ratio: Float, persist: Boolean = true) {
+        if (!ratio.isFinite()) return
+
+        zoomRatio = ratio.coerceIn(zoomMin, zoomMax)
+
+        if (persist) {
+            getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+                .edit()
+                .putFloat(KEY_ZOOM, zoomRatio)
+                .apply()
+        }
+
+        applyZoom()
+    }
+
+    /* 拨盘给的是 0..1 的位置，按真实区间线性换成倍率；落库等松手，见 dial 监听 */
+    private fun setZoomByPosition(position: Float) {
+        setZoom(zoomMin + (zoomMax - zoomMin) * position.coerceIn(0f, 1f), persist = false)
+    }
+
+    private fun applyZoom() {
+        val cam = camera ?: return
+
+        runCatching { cam.cameraControl.setZoomRatio(zoomRatio) }
+
+        renderZoom()
+        mjpegServer?.let {
+            it.zoomRatio = zoomRatio
+            it.zoomMin = zoomMin
+            it.zoomMax = zoomMax
+        }
+    }
+
+    /*
+     * 区间直接读 Camera2 的 characteristics：bind 完就是确定值。
+     * 实测后置 [1,10]、前置 [1,4]，和 dumpsys media.camera 里
+     * android.control.zoomRatioRange 一一对上。
+     *
+     * 老路子是问 zoomState，但它换镜头后只回调一次、报 min=max=1.0
+     * 且之后不再更新，拿它钳制会把前置的变焦锁死在 1 倍。
+     */
+    @OptIn(ExperimentalCamera2Interop::class)
+    private fun readZoomBounds() {
+        val cam = camera ?: return
+
+        val info = Camera2CameraInfo.from(cam.cameraInfo)
+
+        val range =
+            info.getCameraCharacteristic(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+                ?: info.getCameraCharacteristic(
+                    CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM
+                )?.let { Range(1f, it) }
+                ?: Range(1f, 1f)
+
+        zoomMin = range.lower
+        zoomMax = range.upper.coerceAtLeast(range.lower)
+
+        zoomRatio = zoomRatio.coerceIn(zoomMin, zoomMax)
+    }
+
     /*
      * 一秒一个窗口把实测帧率报给服务端：电脑端读 /status 就能核对
      * 「设的帧率」和「真跑出来的帧率」是不是一个数。
@@ -487,6 +725,20 @@ class MainActivity : ComponentActivity() {
         frontSegment.setOnClickListener { selectLens(LENS_FRONT) }
 
         lightButton.setOnClickListener { setLight(!lightOn) }
+
+        rotateButton.setOnClickListener { showRotationPopup() }
+
+        zoomDial.listener = object : ZoomDialView.Listener {
+
+            override fun onProgress(progress: Float) {
+                setZoomByPosition(progress)
+            }
+
+            /* 松手才落库：拖一次要回调上百次，每写一次偏好没意义 */
+            override fun onCommit() {
+                setZoom(zoomRatio)
+            }
+        }
 
         onBackPressedDispatcher.addCallback(this) { showLeaveChoice() }
 
@@ -592,6 +844,9 @@ class MainActivity : ComponentActivity() {
      * 看不见的框，所以直接走系统小窗，不打断。
      */
     private fun leaveToSmallWindow(prompt: Boolean) {
+        /* 弹层是独立窗口，收进小窗之前先关掉，免得回来时它还挂着 */
+        runCatching { rotationPopup?.dismiss() }
+
         if (Settings.canDrawOverlays(this)) {
             enterFloat()
         } else if (prompt) {
@@ -673,14 +928,14 @@ class MainActivity : ComponentActivity() {
             PreviewView.ScaleType.FIT_CENTER
         }
 
-        (previewView.layoutParams as? LinearLayout.LayoutParams)?.let {
+        (previewBox.layoutParams as? LinearLayout.LayoutParams)?.let {
             it.setMargins(
                 if (pip) 0 else previewSideMargin,
                 0,
                 if (pip) 0 else previewSideMargin,
                 if (pip) 0 else previewBottomMargin
             )
-            previewView.layoutParams = it
+            previewBox.layoutParams = it
         }
     }
 
@@ -696,6 +951,10 @@ class MainActivity : ComponentActivity() {
 
         topBar.visibility = visibility
         controls.visibility = visibility
+
+        /* 拨盘和方向胶囊浮在画面上，小窗里也得跟着收掉 */
+        previewOverlay.visibility = visibility
+
         applyPipLayout(isInPictureInPictureMode)
     }
 
@@ -731,6 +990,10 @@ class MainActivity : ComponentActivity() {
             light = this@MainActivity.lightOn
             fpsTarget = this@MainActivity.targetFps
             focusMode = this@MainActivity.focusMode
+            rotation = this@MainActivity.rotationDegrees
+            zoomRatio = this@MainActivity.zoomRatio
+            zoomMin = this@MainActivity.zoomMin
+            zoomMax = this@MainActivity.zoomMax
 
             onLens = { next ->
                 mainHandler.post { selectLens(next) }
@@ -746,6 +1009,14 @@ class MainActivity : ComponentActivity() {
 
             onFocus = { mode ->
                 mainHandler.post { setFocus(mode) }
+            }
+
+            onRotation = { degrees ->
+                mainHandler.post { setRotationDegrees(degrees) }
+            }
+
+            onZoom = { ratio ->
+                mainHandler.post { setZoom(ratio) }
             }
 
             start()
@@ -947,6 +1218,13 @@ class MainActivity : ComponentActivity() {
             applyFrameRate()
             applyFocus()
 
+            /*
+             * 换镜头就是换了一台相机：区间不一样（实测后置 10 倍、前置 4 倍），
+             * 倍率也会掉回 1 倍，所以先读新区间、再把存下来的倍率下发一次。
+             */
+            readZoomBounds()
+            applyZoom()
+
             streaming = true
         } catch (e: Exception) {
             camera = null
@@ -979,7 +1257,11 @@ class MainActivity : ComponentActivity() {
             if (now - previous < frameIntervalMs) return
             if (!lastEncodeTime.compareAndSet(previous, now)) return
 
-            val jpeg = YuvToJpegConverter.convert(image, JPEG_QUALITY)
+            val jpeg = YuvToJpegConverter.convert(
+                image,
+                JPEG_QUALITY,
+                rotationDegrees
+            )
 
             if (jpeg != null && jpeg.isNotEmpty()) {
                 server.updateFrame(jpeg)

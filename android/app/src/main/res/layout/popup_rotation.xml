@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- 画面方向的下拉框：四个角度常驻，当前那个是绿的 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+
+    android:orientation="vertical"
+
+    android:padding="4dp">
+
+    <TextView
+        android:id="@+id/rotRow0"
+
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+
+        android:background="@drawable/bg_popup_row"
+        android:clickable="true"
+        android:focusable="true"
+
+        android:gravity="center_vertical"
+
+        android:paddingStart="14dp"
+        android:paddingEnd="18dp"
+
+        android:text="@string/rotation_0"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/rotRow90"
+
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+
+        android:background="@drawable/bg_popup_row"
+        android:clickable="true"
+        android:focusable="true"
+
+        android:gravity="center_vertical"
+
+        android:paddingStart="14dp"
+        android:paddingEnd="18dp"
+
+        android:text="@string/rotation_90"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/rotRow180"
+
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+
+        android:background="@drawable/bg_popup_row"
+        android:clickable="true"
+        android:focusable="true"
+
+        android:gravity="center_vertical"
+
+        android:paddingStart="14dp"
+        android:paddingEnd="18dp"
+
+        android:text="@string/rotation_180"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/rotRow270"
+
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+
+        android:background="@drawable/bg_popup_row"
+        android:clickable="true"
+        android:focusable="true"
+
+        android:gravity="center_vertical"
+
+        android:paddingStart="14dp"
+        android:paddingEnd="18dp"
+
+        android:text="@string/rotation_270"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+</LinearLayout>
