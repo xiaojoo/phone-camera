@@ -3,7 +3,7 @@
 ; 这里只改打包用的产品名；界面里的应用名仍是「手机摄像头桥接」/ Phone Camera Bridge。
 
 #define MyAppName "PhoneCamera"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1"
 #define MyAppExeName "PhoneCamera.exe"
 
 [Setup]

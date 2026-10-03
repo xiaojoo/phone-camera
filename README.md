@@ -201,7 +201,7 @@ ISCC packaging\PhoneCamera.iss                # 产出 pc/installer/PhoneCamera-
 App 的身份，Android 只校验「这次安装和上次是不是同一个 keystore 签的」。
 
 ```bash
-cd android && ./gradlew assembleRelease   # 产出 app/build/outputs/apk/release/PhoneCamera-0.1.0-release.apk
+cd android && ./gradlew assembleRelease   # 产出 app/build/outputs/apk/release/PhoneCamera-0.1.1-release.apk
 ```
 
 产物名由 `app/build.gradle.kts` 里的 `androidComponents` 改成和电脑端一致（默认名带的是模块名 `app`）。
@@ -210,7 +210,9 @@ keystore 已经生成好放在仓库外（`~/.android/phonecamera-release.keysto
 同目录但完全独立），凭据写在 `android/keystore.properties`，两个文件都不进仓库。
 `app/build.gradle.kts` 读到 `keystore.properties` 就签 release，读不到就退回 debug 签名，
 所以 clone 出来的机器不带密钥也能构建。证书是 RSA 2048 / SHA384withRSA / 有效期 10000 天，
-`CN=PhoneCamera, O=sunxiaojie, C=CN`，SHA-256 开头 `80616cd5`。
+`CN=PhoneCamera, O=sunxiaojie, C=CN`，SHA-256 开头 `acf6ac0f`。
+这张是 2026-10-04 重新生成的：原来那张（SHA-256 开头 `80616cd5`）随 `~/.android` 目录在 9-29
+被重建时丢了，找不回来。所以任何用旧证书装过的设备都要先卸载才能装新签名的包。
 
 丢了这个 keystore 就没法覆盖升级已发出去的机器，只能先卸载再装，所以除了本机还要在别处留一份备份。
 换密码用 `keytool -storepasswd` / `keytool -keypasswd`，重新生成用 `keytool -genkeypair -keystore
@@ -236,7 +238,7 @@ keystore 已经生成好放在仓库外（`~/.android/phonecamera-release.keysto
 所以这里不签名，改成发布时把安装包的 SHA-256 写进 Release 说明，用户下载后自己对一下：
 
 ```powershell
-certutil -hashfile PhoneCamera-0.1.0-setup.exe SHA256
+certutil -hashfile PhoneCamera-0.1.1-setup.exe SHA256
 ```
 
 ---
